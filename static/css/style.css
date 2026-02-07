@@ -1,22 +1,106 @@
 /* Base stylesheet for the Flask app */
 :root{
-    --bg: #f8fafc;
-    --card: #ffffff;
-    --accent: #2563eb;
-    --text: #0f172a;
+    --bg: #fff0ff;
+    --card: #dbb6ee;
+    --accent: #7f4ca5;
+    --text: #4b1c71;
+    --primary: #4b1c71;
+    --secondary: #7f4ca5;
+    --tertiary: #b57edc;
 }
 
 *{box-sizing: border-box;margin:0;padding:0}
 html,body{height:100%;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background:var(--bg); color:var(--text)}
 
+/* Auth Modal */
+.modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(75,28,113,0.8);display:none;align-items:center;justify-content:center;z-index:999}
+.modal.active{display:flex}
+.modal-content{background:var(--card);padding:40px;border-radius:12px;width:90%;max-width:400px;box-shadow:0 8px 32px rgba(0,0,0,0.2)}
+.modal-content h2{color:var(--primary);margin-bottom:24px;text-align:center}
+
+.auth-tabs{display:flex;gap:12px;margin-bottom:24px}
+.auth-tab-btn{flex:1;padding:12px;background:none;border:2px solid var(--secondary);color:var(--primary);cursor:pointer;border-radius:6px;font-weight:500;transition:all 0.3s}
+.auth-tab-btn.active{background:var(--secondary);color:#fff}
+
+.auth-form{display:none}
+.auth-form.active{display:block}
+.auth-form input{width:100%;padding:12px;margin-bottom:12px;border:2px solid var(--secondary);border-radius:6px;font-size:1rem;color:var(--text)}
+.auth-form input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(127,76,165,0.1)}
+.auth-form button{width:100%;padding:12px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:600;transition:background 0.3s}
+.auth-form button:hover{background:var(--secondary)}
+
+/* App Container */
+.app-container{display:block}
+.app-container.hidden{display:none}
+
 .container{max-width:960px;margin:48px auto;padding:24px;background:var(--card);border-radius:8px;box-shadow:0 4px 16px rgba(2,6,23,0.08)}
 
 h1{font-size:1.75rem;color:var(--accent);margin-bottom:0.5rem}
 
-p{line-height:1.6;color:rgba(15,23,42,0.85)}
+p{line-height:1.6;color:rgba(75,28,113,0.85)}
 
-/* Utility */
-.text-center{text-align:center}
+/* Navigation */
+.navbar{background:var(--primary);padding:0;border-bottom:4px solid var(--secondary)}
+
+.nav-container{max-width:960px;margin:0 auto;display:flex;gap:0;align-items:center;justify-content:space-between}
+
+.nav-tab{display:inline-block;padding:16px 24px;color:#ffffff;text-decoration:none;font-weight:500;font-size:1rem;transition:background 0.3s ease;border-bottom:3px solid transparent;cursor:pointer}
+
+.nav-tab:hover{background:var(--secondary)}
+
+.nav-tab.active{background:var(--secondary);border-bottom-color:#ffffff}
+
+.nav-right{display:flex;align-items:center;gap:20px;padding-right:24px}
+.user-email{color:#ffffff;font-weight:500}
+.logout-btn{padding:8px 16px;background:var(--tertiary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.9rem;font-weight:500}
+.logout-btn:hover{background:var(--secondary)}
+
+/* Tab Content */
+.tab-content{display:none}
+
+.tab-content.active{display:block;animation:fadeIn 0.3s ease}
+
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* Charts */
+.chart-container{margin:24px 0;padding:20px;background:#f5f0ff;border-radius:8px;position:relative;height:250px}
+
+/* Forms */
+.productivity-form, .garden-form, .friends-form, .groups-form{margin-top:24px;padding:20px;background:#f5f0ff;border-radius:8px}
+
+.productivity-form h3, .garden-form h3, .friends-form h3, .groups-form h3{color:var(--primary);margin-bottom:12px}
+
+.productivity-form input, .garden-form input, .friends-form input, .groups-form input{width:100%;padding:10px;margin-bottom:12px;border:2px solid var(--secondary);border-radius:4px;font-size:0.95rem}
+
+.productivity-form input[type="range"]{margin:12px 0}
+
+.productivity-form button, .garden-form button, .friends-form button, .groups-form button{width:100%;padding:10px;background:var(--secondary);color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:500;transition:background 0.3s}
+
+.productivity-form button:hover, .garden-form button:hover, .friends-form button:hover, .groups-form button:hover{background:var(--primary)}
+
+/* Items List */
+.item{padding:12px;background:#fff;border-left:4px solid var(--secondary);margin:8px 0;border-radius:4px}
+
+/* Tasks List */
+.tasks-list{margin-top:24px;padding:16px;background:#f5f0ff;border-radius:8px}
+.task-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:#fff;margin:8px 0;border-radius:4px;border-left:4px solid var(--secondary)}
+.task-info{flex:1}
+.task-info strong{display:block;color:var(--primary);margin-bottom:4px}
+.task-date{display:block;font-size:0.85rem;color:rgba(75,28,113,0.7)}
+.delete-btn{padding:6px 12px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.85rem;transition:background 0.3s}
+.delete-btn:hover{background:#c0392b}
 
 /* Responsive */
-@media (max-width:600px){.container{margin:16px;padding:16px}}
+@media (max-width:768px){
+    .nav-container{flex-wrap:wrap;justify-content:flex-start}
+    .nav-tab{padding:12px 16px;font-size:0.9rem;flex:1;text-align:center;border-right:1px solid var(--primary)}
+    .nav-tab:last-child{border-right:none}
+    .nav-right{flex:1;justify-content:flex-end}
+}
+
+@media (max-width:600px){
+    .container{margin:16px;padding:16px}
+    .nav-tab{padding:12px 8px;font-size:0.8rem}
+    h1{font-size:1.25rem}
+    .modal-content{width:95%}
+}

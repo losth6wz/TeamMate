@@ -3,12 +3,504 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>TeamMate - Productivity Tracker</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>Welcome to the Home Page</h1>
-        <p>This is a sample template for the home page.</p>
+    <!-- Auth Modal -->
+    <div id="authModal" class="modal active">
+        <div class="modal-content">
+            <h2>Welcome to TeamMate</h2>
+            <div class="auth-tabs">
+                <button class="auth-tab-btn active" id="loginTab">Login</button>
+                <button class="auth-tab-btn" id="signupTab">Sign Up</button>
+            </div>
+            
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form active">
+                <input type="text" placeholder="Username" required>
+                <input type="password" placeholder="Password" required>
+                <button type="submit">Login</button>
+            </form>
+            
+            <!-- Signup Form -->
+            <form id="signupForm" class="auth-form">
+                <input type="text" placeholder="Username" required>
+                <input type="password" placeholder="Password (min 6 chars)" required>
+                <input type="password" placeholder="Confirm Password" required>
+                <button type="submit">Sign Up</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App (hidden until logged in) -->
+    <div id="appContainer" class="app-container hidden">
+        <nav class="navbar">
+            <div class="nav-container">
+                <a href="#" class="nav-tab active" data-tab="dashboard">Dashboard</a>
+                <a href="#" class="nav-tab" data-tab="garden">Garden</a>
+                <a href="#" class="nav-tab" data-tab="friends">Friends</a>
+                <a href="#" class="nav-tab" data-tab="groups">Groups</a>
+                <div class="nav-right">
+                    <span id="userEmail" class="user-email"></span>
+                    <button id="logoutBtn" class="logout-btn">Logout</button>
+                </div>
+            </div>
+        </nav>
+        
+        <div class="container">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <h1>Dashboard</h1>
+                <p>Your task completion at a glance</p>
+                <div class="chart-container">
+                    <canvas id="productivityChart"></canvas>
+                </div>
+                <div class="productivity-form">
+                    <h3>Log Tasks Completed</h3>
+                    <input type="text" id="taskName" placeholder="Task Name (optional)">
+                    <input type="number" id="tasksCompleted" placeholder="Tasks Completed" min="0">
+                    <button onclick="saveProductivity()">Save Progress</button>
+                </div>
+                <div id="tasksList" class="tasks-list"></div>
+            </div>
+            
+            <!-- Garden Tab -->
+            <div id="garden" class="tab-content">
+                <h1>Garden</h1>
+                <p>Manage and view your garden plants</p>
+                <div id="gardenList"></div>
+                <div class="garden-form">
+                    <h3>Add Plant</h3>
+                    <input type="text" id="plantName" placeholder="Plant Name">
+                    <input type="text" id="plantType" placeholder="Plant Type">
+                    <input type="text" id="plantHealth" placeholder="Health Status">
+                    <button onclick="addPlant()">Add Plant</button>
+                </div>
+            </div>
+            
+            <!-- Friends Tab -->
+            <div id="friends" class="tab-content">
+                <h1>Friends</h1>
+                <p>Connect with your friends</p>
+                <div id="friendsList"></div>
+                <div class="friends-form">
+                    <h3>Add Friend</h3>
+                    <input type="text" id="friendName" placeholder="Friend Name">
+                    <input type="text" id="friendStatus" placeholder="Status">
+                    <button onclick="addFriend()">Add Friend</button>
+                </div>
+            </div>
+            
+            <!-- Groups Tab -->
+            <div id="groups" class="tab-content">
+                <h1>Groups</h1>
+                <p>Join and manage groups</p>
+                <div id="groupsList"></div>
+                <div class="groups-form">
+                    <h3>Create Group</h3>
+                    <input type="text" id="groupName" placeholder="Group Name">
+                    <input type="text" id="groupDesc" placeholder="Description">
+                    <button onclick="addGroup()">Create Group</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let productivityChart = null;
+
+        // Auth Tab Switching
+        document.getElementById('loginTab').addEventListener('click', () => {
+            document.getElementById('loginForm').classList.add('active');
+            document.getElementById('signupForm').classList.remove('active');
+            document.getElementById('loginTab').classList.add('active');
+            document.getElementById('signupTab').classList.remove('active');
+        });
+
+        document.getElementById('signupTab').addEventListener('click', () => {
+            document.getElementById('signupForm').classList.add('active');
+            document.getElementById('loginForm').classList.remove('active');
+            document.getElementById('signupTab').classList.add('active');
+            document.getElementById('loginTab').classList.remove('active');
+        });
+
+        // Login Form
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = e.target[0].value;
+            const password = e.target[1].value;
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser = data.user_id;
+                    showApp();
+                } else {
+                    alert(data.error || 'Login failed');
+                }
+            } catch (err) {
+                alert('Login failed: ' + err);
+            }
+        });
+
+        // Signup Form
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = e.target[0].value;
+            const password = e.target[1].value;
+            const confirmPassword = e.target[2].value;
+            
+            if (password !== confirmPassword) {
+                alert('Passwords do not match');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/signup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentUser = data.user_id;
+                    showApp();
+                } else {
+                    alert(data.error || 'Signup failed');
+                }
+            } catch (err) {
+                alert('Signup failed: ' + err);
+            }
+        });
+
+        // Show app after login
+        function showApp() {
+            document.getElementById('authModal').classList.remove('active');
+            document.getElementById('appContainer').classList.remove('hidden');
+            loadDashboard();
+            loadAllData();
+        }
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch('/api/logout', {method: 'POST'});
+            location.reload();
+        });
+
+        // Tab Navigation
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabName = tab.getAttribute('data-tab');
+                
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                });
+                document.querySelectorAll('.nav-tab').forEach(t => {
+                    t.classList.remove('active');
+                });
+                
+                document.getElementById(tabName).classList.add('active');
+                tab.classList.add('active');
+                
+                if (tabName === 'dashboard') loadDashboard();
+                if (tabName === 'garden') loadGarden();
+                if (tabName === 'friends') loadFriends();
+                if (tabName === 'groups') loadGroups();
+            });
+        });
+
+        // Load Dashboard with Chart
+        async function loadDashboard() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                const tasks = data.tasks || [];
+                
+                // Group tasks by date and create entries for stacking
+                const groupedByDate = {};
+                tasks.forEach(t => {
+                    if (!groupedByDate[t.date]) {
+                        groupedByDate[t.date] = [];
+                    }
+                    groupedByDate[t.date].push(t.tasks_completed || 0);
+                });
+                
+                // Sort dates
+                const sortedDates = Object.keys(groupedByDate).sort();
+                
+                // Create datasets for each task entry (for stacking)
+                const datasets = [];
+                let maxIndex = Math.max(...Object.values(groupedByDate).map(arr => arr.length));
+                let maxTasksPerDay = Math.max(...sortedDates.map(date => groupedByDate[date].reduce((a, b) => a + b, 0)), 10);
+                
+                for (let i = 0; i < maxIndex; i++) {
+                    const dataForIndex = sortedDates.map(date => groupedByDate[date][i] || 0);
+                    
+                    // Skip if all zeros
+                    if (dataForIndex.every(v => v === 0)) continue;
+                    
+                    datasets.push({
+                        label: `Task Entry ${i + 1}`,
+                        data: dataForIndex,
+                        backgroundColor: [
+                            'rgba(127, 76, 165, 0.8)',
+                            'rgba(181, 126, 220, 0.8)',
+                            'rgba(219, 182, 238, 0.8)',
+                            'rgba(200, 150, 200, 0.8)',
+                            'rgba(160, 100, 170, 0.8)'
+                        ][i % 5],
+                        borderColor: '#4b1c71',
+                        borderWidth: 1
+                    });
+                }
+                
+                const ctx = document.getElementById('productivityChart');
+                if (productivityChart) productivityChart.destroy();
+                
+                productivityChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: sortedDates.length ? sortedDates : ['No data yet'],
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                stacked: true,
+                                ticks: {color: '#4b1c71'},
+                                grid: {color: '#dbb6ee'}
+                            },
+                            y: {
+                                stacked: true,
+                                beginAtZero: true,
+                                max: maxTasksPerDay,
+                                ticks: {
+                                    color: '#4b1c71',
+                                    stepSize: 1,
+                                    callback: function(value) {
+                                        return Math.floor(value);
+                                    }
+                                },
+                                grid: {color: '#dbb6ee'}
+                            }
+                        }
+                    }
+                });
+                
+                // Display tasks list for deletion
+                displayTasksList(tasks);
+            } catch (err) {
+                console.log('Dashboard load error:', err);
+            }
+        }
+        
+        // Display tasks list
+        function displayTasksList(tasks) {
+            const html = tasks.length ? tasks.map((t, idx) => `
+                <div class="task-item">
+                    <div class="task-info">
+                        <strong>${t.task_name || 'Unnamed Task'}</strong>
+                        <span class="task-date">${t.date}: ${t.tasks_completed} task(s)</span>
+                    </div>
+                    <button onclick="deleteTask(${t.id})" class="delete-btn">Delete</button>
+                </div>
+            `).join('') : '<p>No tasks logged yet</p>';
+            document.getElementById('tasksList').innerHTML = html;
+        }
+        
+        // Delete task
+        async function deleteTask(taskId) {
+            try {
+                const res = await fetch(`/api/delete-task/${taskId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Task deleted!');
+                    loadDashboard();
+                } else {
+                    alert('Failed to delete task');
+                }
+            } catch (err) {
+                alert('Delete failed: ' + err);
+            }
+        }
+
+        // Save Productivity
+        async function saveProductivity() {
+            const taskName = document.getElementById('taskName').value || 'Unnamed Task';
+            const tasksCompleted = parseInt(document.getElementById('tasksCompleted').value);
+            
+            if (!tasksCompleted && tasksCompleted !== 0) {
+                alert('Please enter tasks completed');
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        table: 'tasks',
+                        data: {
+                            date: new Date().toISOString().split('T')[0],
+                            task_name: taskName,
+                            tasks_completed: tasksCompleted
+                        }
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Progress saved!');
+                    document.getElementById('taskName').value = '';
+                    document.getElementById('tasksCompleted').value = '';
+                    loadDashboard();
+                }
+            } catch (err) {
+                alert('Save failed: ' + err);
+            }
+        }
+
+        // Load Garden
+        async function loadGarden() {
+            try {
+                const res = await fetch('/api/garden');
+                const data = await res.json();
+                const plants = data.plants || [];
+                const html = plants.map(p => `<div class="item"><strong>${p.plant_name}</strong><br>${p.plant_type}<br>Status: ${p.health_status}</div>`).join('');
+                document.getElementById('gardenList').innerHTML = html || '<p>No plants yet</p>';
+            } catch (err) {
+                console.log('Garden load error:', err);
+            }
+        }
+
+        // Add Plant
+        async function addPlant() {
+            const name = document.getElementById('plantName').value;
+            const type = document.getElementById('plantType').value;
+            const health = document.getElementById('plantHealth').value;
+            
+            if (!name || !type) return;
+            
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        table: 'garden',
+                        data: {plant_name: name, plant_type: type, health_status: health}
+                    })
+                });
+                document.getElementById('plantName').value = '';
+                document.getElementById('plantType').value = '';
+                document.getElementById('plantHealth').value = '';
+                loadGarden();
+            } catch (err) {
+                alert('Failed to add plant');
+            }
+        }
+
+        // Load Friends
+        async function loadFriends() {
+            try {
+                const res = await fetch('/api/friends');
+                const data = await res.json();
+                const friends = data.friends || [];
+                const html = friends.map(f => `<div class="item"><strong>${f.friend_name}</strong><br>Status: ${f.friend_status}</div>`).join('');
+                document.getElementById('friendsList').innerHTML = html || '<p>No friends yet</p>';
+            } catch (err) {
+                console.log('Friends load error:', err);
+            }
+        }
+
+        // Add Friend
+        async function addFriend() {
+            const name = document.getElementById('friendName').value;
+            const status = document.getElementById('friendStatus').value;
+            
+            if (!name) return;
+            
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        table: 'friends',
+                        data: {friend_name: name, friend_status: status}
+                    })
+                });
+                document.getElementById('friendName').value = '';
+                document.getElementById('friendStatus').value = '';
+                loadFriends();
+            } catch (err) {
+                alert('Failed to add friend');
+            }
+        }
+
+        // Load Groups
+        async function loadGroups() {
+            try {
+                const res = await fetch('/api/groups');
+                const data = await res.json();
+                const groups = data.groups || [];
+                const html = groups.map(g => `<div class="item"><strong>${g.group_name}</strong><br>${g.group_description}</div>`).join('');
+                document.getElementById('groupsList').innerHTML = html || '<p>No groups yet</p>';
+            } catch (err) {
+                console.log('Groups load error:', err);
+            }
+        }
+
+        // Add Group
+        async function addGroup() {
+            const name = document.getElementById('groupName').value;
+            const desc = document.getElementById('groupDesc').value;
+            
+            if (!name) return;
+            
+            try {
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        table: 'groups',
+                        data: {group_name: name, group_description: desc}
+                    })
+                });
+                document.getElementById('groupName').value = '';
+                document.getElementById('groupDesc').value = '';
+                loadGroups();
+            } catch (err) {
+                alert('Failed to add group');
+            }
+        }
+
+        // Load all data
+        function loadAllData() {
+            loadGarden();
+            loadFriends();
+            loadGroups();
+        }
+
+        // Focus Score Slider
+        document.getElementById('focusScore').addEventListener('input', (e) => {
+            document.getElementById('focusScoreValue').textContent = e.target.value;
+        });
+    </script>
 </body>
 </html>
