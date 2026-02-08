@@ -293,20 +293,15 @@ def save_data():
             date = data.get('date')
             task_name = data.get('task_name')
             
-            print(f"DEBUG: Looking for task - user_id: {user_id}, date: {date}, task_name: {task_name}")
-            
             # Check if task already exists
             existing = supabase.table('tasks').select('id').eq('user_id', user_id).eq('date', date).eq('task_name', task_name).execute()
-            print(f"DEBUG: Query result: {existing.data}")
             
             if existing.data and len(existing.data) > 0:
                 # Update existing task - only update the tasks_completed field
                 task_id = existing.data[0]['id']
-                print(f"DEBUG: Updating task {task_id} with tasks_completed={data.get('tasks_completed')}")
                 supabase.table('tasks').update({'tasks_completed': data.get('tasks_completed')}).eq('id', task_id).execute()
             else:
                 # Insert new task
-                print(f"DEBUG: Inserting new task")
                 supabase.table(table).insert(data).execute()
         else:
             # For other tables, just insert
@@ -558,6 +553,229 @@ def get_friend_garden(friend_id):
     except Exception as e:
         print(f"Get friend garden error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# Group Routes
+@app.route('/api/create-group', methods=['POST'])
+@login_required
+def create_group():
+    try:
+        user_id = session.get('user_id')
+        payload = request.json
+        group_name = payload.get('group_name')
+        
+        if not group_name:
+            return jsonify({'error': 'Group name required'}), 400
+        
+        # Create group
+        group_data = supabase.table('groups').insert({
+            'user_id': user_id,
+            'group_name': group_name,
+            'created_at': date.today().isoformat()
+        }).execute()
+        
+        return jsonify({'success': True, 'group_id': group_data.data[0]['id']})
+    except Exception as e:
+        print(f"Create group error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/my-groups', methods=['GET'])
+@login_required
+def get_my_groups():
+    try:
+        user_id = session.get('user_id')
+        
+        # Get groups created by user
+        created_groups = supabase.table('groups').select('*').eq('user_id', user_id).execute()
+        
+        # Get groups user is a member of
+        member_groups = supabase.table('group_members').select('group_id').eq('user_id', user_id).execute()
+        member_group_ids = [m['group_id'] for m in (member_groups.data or [])]
+        
+        groups = []
+        for g in (created_groups.data or []):
+            groups.append({
+                'id': g['id'],
+                'name': g['group_name'],
+                'created_by_me': True
+            })
+        
+        if member_group_ids:
+            member_data = supabase.table('groups').select('*').in_('id', member_group_ids).execute()
+            for g in (member_data.data or []):
+                groups.append({
+                    'id': g['id'],
+                    'name': g['group_name'],
+                    'created_by_me': False
+                })
+        
+        return jsonify({'groups': groups})
+    except Exception as e:
+        print(f"Get my groups error: {e}")
+        return jsonify({'groups': []})
+
+@app.route('/api/group/<int:group_id>/members', methods=['GET'])
+@login_required
+def get_group_members(group_id):
+    try:
+        user_id = session.get('user_id')
+        
+        # Get group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        if not group.data:
+            return jsonify({'error': 'Group not found'}), 404
+        
+        # Get all members (including creator)
+        members = supabase.table('group_members').select('user_id').eq('group_id', group_id).execute()
+        member_ids = [m['user_id'] for m in (members.data or [])]
+        creator_id = group.data[0]['user_id']
+        
+        # Add creator if not already in list
+        if creator_id not in member_ids:
+            member_ids.insert(0, creator_id)
+        
+        # Get user details
+        user_details = supabase.table('users').select('id, username').in_('id', member_ids).execute()
+        
+        return jsonify({'members': user_details.data or []})
+    except Exception as e:
+        print(f"Get group members error: {e}")
+        return jsonify({'members': []})
+
+@app.route('/api/group/<int:group_id>/invite', methods=['POST'])
+@login_required
+def invite_to_group(group_id):
+    try:
+        user_id = session.get('user_id')
+        payload = request.json
+        friend_id = payload.get('friend_id')
+        
+        # Verify user owns group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        if not group.data or group.data[0]['user_id'] != user_id:
+            return jsonify({'error': 'Not group owner'}), 403
+        
+        # Check if already a member
+        existing = supabase.table('group_members').select('id').eq('group_id', group_id).eq('user_id', friend_id).execute()
+        if existing.data:
+            return jsonify({'error': 'Already a member'}), 400
+        
+        # Add member
+        supabase.table('group_members').insert({
+            'group_id': group_id,
+            'user_id': friend_id
+        }).execute()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Invite error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/group/<int:group_id>/remove-member', methods=['POST'])
+@login_required
+def remove_member(group_id):
+    try:
+        user_id = session.get('user_id')
+        payload = request.json
+        member_id = payload.get('member_id')
+        
+        # Verify user owns group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        if not group.data or group.data[0]['user_id'] != user_id:
+            return jsonify({'error': 'Not group owner'}), 403
+        
+        # Remove member
+        supabase.table('group_members').delete().eq('group_id', group_id).eq('user_id', member_id).execute()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Remove member error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/group/<int:group_id>/delete', methods=['POST'])
+@login_required
+def delete_group(group_id):
+    try:
+        user_id = session.get('user_id')
+        
+        # Verify user owns group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        if not group.data or group.data[0]['user_id'] != user_id:
+            return jsonify({'error': 'Not group owner'}), 403
+        
+        # Delete messages
+        supabase.table('group_messages').delete().eq('group_id', group_id).execute()
+        
+        # Delete members
+        supabase.table('group_members').delete().eq('group_id', group_id).execute()
+        
+        # Delete group
+        supabase.table('groups').delete().eq('id', group_id).execute()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Delete group error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/group/<int:group_id>/send-message', methods=['POST'])
+@login_required
+def send_group_message(group_id):
+    try:
+        user_id = session.get('user_id')
+        payload = request.json
+        message = payload.get('message')
+        
+        if not message:
+            return jsonify({'error': 'Message required'}), 400
+        
+        # Verify user is member of group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        is_owner = group.data and group.data[0]['user_id'] == user_id
+        
+        if not is_owner:
+            member = supabase.table('group_members').select('id').eq('group_id', group_id).eq('user_id', user_id).execute()
+            if not member.data:
+                return jsonify({'error': 'Not a member'}), 403
+        
+        # Get username
+        user = supabase.table('users').select('username').eq('id', user_id).execute()
+        username = user.data[0]['username'] if user.data else 'Unknown'
+        
+        # Save message
+        msg_data = supabase.table('group_messages').insert({
+            'group_id': group_id,
+            'user_id': user_id,
+            'username': username,
+            'message': message,
+            'created_at': date.today().isoformat()
+        }).execute()
+        
+        return jsonify({'success': True, 'message_id': msg_data.data[0]['id']})
+    except Exception as e:
+        print(f"Send message error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/group/<int:group_id>/messages', methods=['GET'])
+@login_required
+def get_group_messages(group_id):
+    try:
+        user_id = session.get('user_id')
+        
+        # Verify user is member of group
+        group = supabase.table('groups').select('user_id').eq('id', group_id).execute()
+        is_owner = group.data and group.data[0]['user_id'] == user_id
+        
+        if not is_owner:
+            member = supabase.table('group_members').select('id').eq('group_id', group_id).eq('user_id', user_id).execute()
+            if not member.data:
+                return jsonify({'error': 'Not a member'}), 403
+        
+        # Get messages
+        messages = supabase.table('group_messages').select('*').eq('group_id', group_id).order('id', desc=False).execute()
+        
+        return jsonify({'messages': messages.data or []})
+    except Exception as e:
+        print(f"Get messages error: {e}")
+        return jsonify({'messages': []})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -162,13 +162,54 @@
             <!-- Groups Tab -->
             <div id="groups" class="tab-content">
                 <h1>Groups</h1>
-                <p>Join and manage groups</p>
-                <div id="groupsList"></div>
-                <div class="groups-form">
-                    <h3>Create Group</h3>
-                    <input type="text" id="groupName" placeholder="Group Name">
-                    <input type="text" id="groupDesc" placeholder="Description">
-                    <button onclick="addGroup()">Create Group</button>
+                <p>Create and manage groups with friends</p>
+                
+                <!-- Create Group Section -->
+                <div style="background: var(--bg-light); padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+                    <h3>Create New Group</h3>
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <input type="text" id="groupName" placeholder="Group Name" style="flex: 1;">
+                        <button onclick="createNewGroup()" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Create</button>
+                    </div>
+                </div>
+                
+                <!-- Groups List -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
+                    <div id="groupsList"></div>
+                </div>
+                
+                <!-- Group Detail Modal -->
+                <div id="groupDetailModal" class="modal">
+                    <div class="modal-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+                        <span style="float: right; cursor: pointer; font-size: 1.5rem; color: #666;" onclick="closeGroupDetail()">&times;</span>
+                        <h2 id="groupDetailName"></h2>
+                        
+                        <!-- Chat Area -->
+                        <div id="chatArea" style="border: 1px solid #ddd; border-radius: 5px; height: 300px; overflow-y: auto; margin-bottom: 15px; padding: 10px; background: white;">
+                            <div id="messagesList"></div>
+                        </div>
+                        
+                        <!-- Message Input -->
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <input type="text" id="messageInput" placeholder="Type a message..." style="flex: 1;">
+                            <button onclick="sendMessage()" style="padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Send</button>
+                        </div>
+                        
+                        <!-- Invite Friends -->
+                        <div style="background: var(--bg-light); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                            <h4>Invite Friends</h4>
+                            <div id="friendsToInvite"></div>
+                        </div>
+                        
+                        <!-- Group Members -->
+                        <div style="background: var(--bg-light); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                            <h4>Members</h4>
+                            <div id="groupMembersList"></div>
+                        </div>
+                        
+                        <!-- Delete Group Button -->
+                        <button id="deleteGroupBtn" onclick="deleteGroup()" style="width: 100%; padding: 10px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;">Delete Group</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -913,26 +954,262 @@
         }
 
         // Add Group
-        async function addGroup() {
-            const name = document.getElementById('groupName').value;
-            const desc = document.getElementById('groupDesc').value;
+        let currentGroupId = null;
+        let currentGroupMembers = [];
+        let currentGroupFriends = [];
+        let groupMessageRefreshInterval = null;
+        
+        async function createNewGroup() {
+            const name = document.getElementById('groupName').value.trim();
             
-            if (!name) return;
+            if (!name) {
+                alert('Group name required');
+                return;
+            }
             
             try {
-                await fetch('/api/save', {
+                const res = await fetch('/api/create-group', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        table: 'groups',
-                        data: {group_name: name, group_description: desc}
-                    })
+                    body: JSON.stringify({group_name: name})
                 });
-                document.getElementById('groupName').value = '';
-                document.getElementById('groupDesc').value = '';
-                loadGroups();
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('groupName').value = '';
+                    loadGroups();
+                } else {
+                    alert(data.error || 'Failed to create group');
+                }
             } catch (err) {
-                alert('Failed to add group');
+                alert('Failed to create group');
+                console.error(err);
+            }
+        }
+        
+        async function loadGroups() {
+            try {
+                const res = await fetch('/api/my-groups');
+                const data = await res.json();
+                const groups = data.groups || [];
+                
+                const container = document.getElementById('groupsList');
+                if (groups.length === 0) {
+                    container.innerHTML = '<p>No groups yet. Create one to get started!</p>';
+                    return;
+                }
+                
+                container.innerHTML = groups.map(g => `
+                    <div style="background: var(--bg-light); padding: 15px; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" onclick="openGroupDetail(${g.id}, '${g.name}')">
+                        <h4 style="margin: 0 0 5px 0;">${g.name}</h4>
+                        <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">${g.created_by_me ? 'Created by you' : 'Member'}</p>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Load groups error:', err);
+            }
+        }
+        
+        async function openGroupDetail(groupId, groupName) {
+            currentGroupId = groupId;
+            document.getElementById('groupDetailName').textContent = groupName;
+            
+            // Clear any existing refresh interval
+            if (groupMessageRefreshInterval) {
+                clearInterval(groupMessageRefreshInterval);
+            }
+            
+            // Load messages
+            await loadGroupMessages();
+            
+            // Load members
+            await loadGroupMembers();
+            
+            // Load friends to invite
+            await loadFriendsForInvite();
+            
+            // Add Enter key listener to message input
+            const messageInput = document.getElementById('messageInput');
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Auto-refresh messages every 2 seconds
+            groupMessageRefreshInterval = setInterval(loadGroupMessages, 2000);
+            
+            document.getElementById('groupDetailModal').classList.add('active');
+        }
+        
+        function closeGroupDetail() {
+            currentGroupId = null;
+            // Clear auto-refresh interval
+            if (groupMessageRefreshInterval) {
+                clearInterval(groupMessageRefreshInterval);
+                groupMessageRefreshInterval = null;
+            }
+            document.getElementById('groupDetailModal').classList.remove('active');
+        }
+        
+        async function loadGroupMessages() {
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/messages`);
+                const data = await res.json();
+                const messages = data.messages || [];
+                
+                const container = document.getElementById('messagesList');
+                container.innerHTML = messages.map(m => `
+                    <div style="background: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 8px;">
+                        <strong style="color: var(--primary);">${m.username}</strong>
+                        <p style="margin: 5px 0 0 0;">${m.message}</p>
+                        <small style="color: var(--text-muted);">${new Date(m.created_at).toLocaleString()}</small>
+                    </div>
+                `).join('');
+                
+                // Scroll to bottom
+                container.parentElement.scrollTop = container.parentElement.scrollHeight;
+            } catch (err) {
+                console.error('Load messages error:', err);
+            }
+        }
+        
+        async function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+            
+            if (!message) return;
+            
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/send-message`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    messageInput.value = '';
+                    await loadGroupMessages();
+                } else {
+                    alert(data.error || 'Failed to send message');
+                }
+            } catch (err) {
+                alert('Failed to send message');
+                console.error(err);
+            }
+        }
+        
+        async function loadGroupMembers() {
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/members`);
+                const data = await res.json();
+                currentGroupMembers = data.members || [];
+                
+                const container = document.getElementById('groupMembersList');
+                container.innerHTML = currentGroupMembers.map(m => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #ddd;">
+                        <span>${m.username}</span>
+                        <button onclick="removeMember(${m.id})" style="padding: 5px 10px; background: #ff6b6b; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9rem;">Remove</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Load members error:', err);
+            }
+        }
+        
+        async function loadFriendsForInvite() {
+            try {
+                // Get all friends
+                const res = await fetch('/api/friends');
+                const data = await res.json();
+                const friends = data.friends || [];
+                
+                // Get current members
+                const membersRes = await fetch(`/api/group/${currentGroupId}/members`);
+                const membersData = await membersRes.json();
+                const memberIds = (membersData.members || []).map(m => m.id);
+                
+                // Filter friends not in group
+                const friendsToInvite = friends.filter(f => !memberIds.includes(f.id));
+                
+                const container = document.getElementById('friendsToInvite');
+                if (friendsToInvite.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-muted);">All friends are already members!</p>';
+                    return;
+                }
+                
+                container.innerHTML = friendsToInvite.map(f => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #ddd;">
+                        <span>${f.username}</span>
+                        <button onclick="inviteFriend(${f.id}, '${f.username}')" style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9rem;">Invite</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error('Load friends error:', err);
+            }
+        }
+        
+        async function inviteFriend(friendId, friendName) {
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/invite`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({friend_id: friendId})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(`${friendName} invited to the group!`);
+                    await loadGroupMembers();
+                    await loadFriendsForInvite();
+                } else {
+                    alert(data.error || 'Failed to invite');
+                }
+            } catch (err) {
+                alert('Failed to invite');
+                console.error(err);
+            }
+        }
+        
+        async function removeMember(memberId) {
+            if (!confirm('Remove this member?')) return;
+            
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/remove-member`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({member_id: memberId})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    await loadGroupMembers();
+                    await loadFriendsForInvite();
+                } else {
+                    alert(data.error || 'Failed to remove member');
+                }
+            } catch (err) {
+                alert('Failed to remove member');
+                console.error(err);
+            }
+        }
+        
+        async function deleteGroup() {
+            if (!confirm('Delete this group permanently?')) return;
+            
+            try {
+                const res = await fetch(`/api/group/${currentGroupId}/delete`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeGroupDetail();
+                    loadGroups();
+                    alert('Group deleted');
+                } else {
+                    alert(data.error || 'Failed to delete group');
+                }
+            } catch (err) {
+                alert('Failed to delete group');
+                console.error(err);
             }
         }
 

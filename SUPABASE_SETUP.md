@@ -59,6 +59,7 @@ CREATE TABLE garden_state (
   block_count INT DEFAULT 0,
   is_dead BOOLEAN DEFAULT FALSE,
   last_activity DATE,
+  last_block_award_date DATE,
   timestamp TIMESTAMP DEFAULT NOW()
 );
 
@@ -77,8 +78,26 @@ CREATE TABLE groups (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   group_name TEXT NOT NULL,
-  group_description TEXT,
-  created_date TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Group Members table (members in groups)
+CREATE TABLE group_members (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(group_id, user_id)
+);
+
+-- Group Messages table (group chat)
+CREATE TABLE group_messages (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  username TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- ============================================
