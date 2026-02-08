@@ -268,6 +268,7 @@ def replant_garden():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/save', methods=['POST'])
+@login_required
 def save_data():
     try:
         user_id = session.get('user_id')
@@ -275,13 +276,39 @@ def save_data():
             return jsonify({'error': 'Unauthorized'}), 401
         if not supabase:
             return jsonify({'success': False, 'error': 'Database not configured'}), 500
+        
         payload = request.json
         table = payload.get('table')
         data = payload.get('data')
-        data['user_id'] = user_id  # Automatically add user_id
-        supabase.table(table).insert(data).execute()
+        data['user_id'] = user_id
+        
+        # Special handling for tasks - update if exists, insert if not
+        if table == 'tasks':
+            date = data.get('date')
+            task_name = data.get('task_name')
+            
+            print(f"DEBUG: Looking for task - user_id: {user_id}, date: {date}, task_name: {task_name}")
+            
+            # Check if task already exists
+            existing = supabase.table('tasks').select('id').eq('user_id', user_id).eq('date', date).eq('task_name', task_name).execute()
+            print(f"DEBUG: Query result: {existing.data}")
+            
+            if existing.data and len(existing.data) > 0:
+                # Update existing task - only update the tasks_completed field
+                task_id = existing.data[0]['id']
+                print(f"DEBUG: Updating task {task_id} with tasks_completed={data.get('tasks_completed')}")
+                supabase.table('tasks').update({'tasks_completed': data.get('tasks_completed')}).eq('id', task_id).execute()
+            else:
+                # Insert new task
+                print(f"DEBUG: Inserting new task")
+                supabase.table(table).insert(data).execute()
+        else:
+            # For other tables, just insert
+            supabase.table(table).insert(data).execute()
+        
         return jsonify({'success': True})
     except Exception as e:
+        print(f"Save error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/delete-task', methods=['DELETE'])

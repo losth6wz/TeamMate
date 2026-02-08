@@ -347,6 +347,29 @@
                 const data = await res.json();
                 const tasks = data.tasks || [];
                 
+                // Sync todos from backend (overwrite localStorage)
+                // Build todos object from backend data
+                const syncedTodos = {};
+                tasks.forEach(t => {
+                    if (!syncedTodos[t.date]) {
+                        syncedTodos[t.date] = [];
+                    }
+                    // Only add completed tasks (tasks_completed = 1)
+                    if (t.tasks_completed === 1) {
+                        syncedTodos[t.date].push({
+                            id: t.id,
+                            text: t.task_name,
+                            completed: true,
+                            completedDate: t.date
+                        });
+                    }
+                });
+                
+                // Merge with localStorage (local todos take priority for editing)
+                todos = {...syncedTodos, ...todos};
+                localStorage.setItem('todos', JSON.stringify(todos));
+                renderCalendar();
+                
                 // Count tasks and focus time per day
                 const tasksByDate = {};
                 const focusTimeByDate = {};
@@ -355,7 +378,10 @@
                         tasksByDate[t.date] = 0;
                         focusTimeByDate[t.date] = 0;
                     }
-                    tasksByDate[t.date]++;
+                    // Only count completed tasks (tasks_completed = 1)
+                    if (t.tasks_completed === 1) {
+                        tasksByDate[t.date]++;
+                    }
                     // Add focus time in minutes (divide by 60 to convert from seconds)
                     if (t.focus_time) {
                         focusTimeByDate[t.date] += t.focus_time / 60;
@@ -976,24 +1002,47 @@
             renderCalendar();
         }
 
-        function addTodo() {
+        async function addTodo() {
             const input = document.getElementById('todoInput');
             const task = input.value.trim();
             if (!task) return;
 
+            const taskId = Date.now();
+            
             if (!todos[selectedDate]) {
                 todos[selectedDate] = [];
             }
             todos[selectedDate].push({
-                id: Date.now(),
+                id: taskId,
                 text: task,
                 completed: false,
                 completedDate: null
             });
+            
             localStorage.setItem('todos', JSON.stringify(todos));
             input.value = '';
             renderTodos();
             renderCalendar();
+            
+            // Save to backend (as uncompleted task)
+            try {
+                const payload = {
+                    table: 'tasks',
+                    data: {
+                        date: selectedDate,
+                        task_name: task,
+                        tasks_completed: 0
+                    }
+                };
+                console.log('Adding task:', payload);
+                await fetch('/api/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+            } catch (err) {
+                console.error('Failed to save task:', err);
+            }
         }
 
         async function toggleTodo(id) {
@@ -1006,27 +1055,36 @@
                         task.completedDate = new Date().toISOString().split('T')[0];
                         
                         // Save to backend when task is completed
+                        const payload = {
+                            table: 'tasks',
+                            data: {
+                                date: selectedDate,
+                                task_name: task.text,
+                                tasks_completed: 1
+                            }
+                        };
+                        console.log('Toggling task ON:', payload);
                         await fetch('/api/save', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
-                                table: 'tasks',
-                                data: {
-                                    date: selectedDate,
-                                    task_name: task.text,
-                                    tasks_completed: 1
-                                }
-                            })
+                            body: JSON.stringify(payload)
                         });
                     } else {
-                        // Remove from backend when task is unchecked
-                        await fetch('/api/delete-task', {
-                            method: 'DELETE',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({
+                        task.completedDate = null;
+                        // Save as uncompleted when task is unchecked
+                        const payload = {
+                            table: 'tasks',
+                            data: {
                                 date: selectedDate,
-                                task_name: task.text
-                            })
+                                task_name: task.text,
+                                tasks_completed: 0
+                            }
+                        };
+                        console.log('Toggling task OFF:', payload);
+                        await fetch('/api/save', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(payload)
                         });
                     }
                     // Refresh chart to show updated data
@@ -1040,11 +1098,30 @@
             }
         }
 
-        function deleteTodo(id) {
+        async function deleteTodo(id) {
+            const task = todos[selectedDate].find(t => t.id === id);
+            const taskName = task?.text || '';
+            
             todos[selectedDate] = todos[selectedDate].filter(t => t.id !== id);
             localStorage.setItem('todos', JSON.stringify(todos));
             renderTodos();
             renderCalendar();
+            
+            // Delete from backend
+            if (taskName) {
+                try {
+                    await fetch('/api/delete-task', {
+                        method: 'DELETE',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            date: selectedDate,
+                            task_name: taskName
+                        })
+                    });
+                } catch (err) {
+                    console.error('Failed to delete task:', err);
+                }
+            }
         }
 
         function renderTodos() {
