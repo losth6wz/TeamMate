@@ -42,6 +42,7 @@
         <nav class="navbar">
             <div class="nav-container">
                 <a href="#" class="nav-tab active" data-tab="dashboard">Dashboard</a>
+                <a href="#" class="nav-tab" data-tab="garden">Garden</a>
                 <a href="#" class="nav-tab" data-tab="friends">Friends</a>
                 <a href="#" class="nav-tab" data-tab="groups">Groups</a>
                 <div class="nav-right">
@@ -107,13 +108,54 @@
             <!-- Friends Tab -->
             <div id="friends" class="tab-content">
                 <h1>Friends</h1>
-                <p>Connect with your friends</p>
-                <div id="friendsList"></div>
-                <div class="friends-form">
+                <p>Connect with your friends and view their gardens</p>
+                
+                <!-- Add Friend Section -->
+                <div class="friends-form" style="margin-bottom: 30px;">
                     <h3>Add Friend</h3>
-                    <input type="text" id="friendName" placeholder="Friend Name">
-                    <input type="text" id="friendStatus" placeholder="Status">
-                    <button onclick="addFriend()">Add Friend</button>
+                    <input type="text" id="friendUsername" placeholder="Enter username">
+                    <button onclick="addFriendByUsername()">Send Friend Request</button>
+                </div>
+                
+                <!-- Friend Requests Section -->
+                <div style="margin-bottom: 30px;">
+                    <h3>Friend Requests <span id="requestCount" style="color: var(--primary);">(0)</span></h3>
+                    <div id="friendRequests" style="background: var(--bg-light); padding: 15px; border-radius: 8px; min-height: 50px;"></div>
+                </div>
+                
+                <!-- Friends List Section -->
+                <div>
+                    <h3>Your Friends</h3>
+                    <div id="friendsList" style="background: var(--bg-light); padding: 15px; border-radius: 8px; min-height: 50px;"></div>
+                </div>
+            </div>
+            
+            <!-- Garden Tab -->
+            <div id="garden" class="tab-content">
+                <h1>Your Garden</h1>
+                <p>Complete tasks to grow your garden</p>
+                
+                <!-- Garden Status -->
+                <div class="garden-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Today's Completion:</span>
+                        <span id="taskCompletionPercent" class="stat-value">0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Garden Blocks:</span>
+                        <span id="blockCount" class="stat-value">0</span>
+                    </div>
+                </div>
+                
+                <!-- Cloudy Reaction -->
+                <div class="cloudy-reaction">
+                    <img id="cloudyReaction" src="{{ url_for('static', filename='sprites/cloudy.png') }}" alt="cloudy reaction">
+                    <p id="cloudyMessage">Keep working on your tasks!</p>
+                </div>
+                
+                <!-- Visual Garden -->
+                <div class="garden-display">
+                    <div id="gardenGrid" class="garden-grid"></div>
                 </div>
             </div>
             
@@ -157,7 +199,15 @@
             }, 150);
         }
 
-        // Toggle cloudy eyes when password inputs are focused/blurred
+        // Initialize password field listeners when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('#loginForm input[type="password"], #signupForm input[type="password"]').forEach(inp => {
+                inp.addEventListener('focus', () => setCloudyEyes(true));
+                inp.addEventListener('blur', () => setCloudyEyes(false));
+            });
+        });
+
+        // Also set up listeners immediately for already-loaded elements
         document.querySelectorAll('#loginForm input[type="password"], #signupForm input[type="password"]').forEach(inp => {
             inp.addEventListener('focus', () => setCloudyEyes(true));
             inp.addEventListener('blur', () => setCloudyEyes(false));
@@ -184,6 +234,11 @@
             const username = e.target[0].value;
             const password = e.target[1].value;
             
+            if (!username || !password) {
+                alert('Please enter username and password');
+                return;
+            }
+            
             try {
                 const res = await fetch('/api/login', {
                     method: 'POST',
@@ -191,6 +246,7 @@
                     body: JSON.stringify({username, password})
                 });
                 const data = await res.json();
+                console.log('Login response:', data, 'Status:', res.status);
                 if (data.success) {
                     currentUser = data.user_id;
                     showApp();
@@ -198,6 +254,7 @@
                     alert(data.error || 'Login failed');
                 }
             } catch (err) {
+                console.error('Login error:', err);
                 alert('Login failed: ' + err);
             }
         });
@@ -209,8 +266,18 @@
             const password = e.target[1].value;
             const confirmPassword = e.target[2].value;
             
+            if (!username || !password || !confirmPassword) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
             if (password !== confirmPassword) {
                 alert('Passwords do not match');
+                return;
+            }
+            
+            if (password.length < 6) {
+                alert('Password must be at least 6 characters');
                 return;
             }
             
@@ -221,6 +288,7 @@
                     body: JSON.stringify({username, password})
                 });
                 const data = await res.json();
+                console.log('Signup response:', data, 'Status:', res.status);
                 if (data.success) {
                     currentUser = data.user_id;
                     showApp();
@@ -228,6 +296,7 @@
                     alert(data.error || 'Signup failed');
                 }
             } catch (err) {
+                console.error('Signup error:', err);
                 alert('Signup failed: ' + err);
             }
         });
@@ -238,6 +307,8 @@
             document.getElementById('appContainer').classList.remove('hidden');
             loadDashboard();
             loadAllData();
+            // Update garden state once per session
+            updateGardenState();
         }
 
         // Logout
@@ -419,76 +490,386 @@
         // Load Garden
         async function loadGarden() {
             try {
-                const res = await fetch('/api/garden');
-                const data = await res.json();
-                const plants = data.plants || [];
-                const html = plants.map(p => `<div class="item"><strong>${p.plant_name}</strong><br>${p.plant_type}<br>Status: ${p.health_status}</div>`).join('');
-                document.getElementById('gardenList').innerHTML = html || '<p>No plants yet</p>';
+                // First update garden state (check if should grow/die)
+                const updateRes = await updateGardenState();
+                
+                // Fetch garden state
+                const gardenRes = await fetch('/api/garden-state');
+                const gardenData = await gardenRes.json();
+                
+                // Calculate completion % from LOCAL todos
+                const today = new Date().toISOString().split('T')[0];
+                const todayTodos = todos[today] || [];
+                const completed = todayTodos.filter(t => t.completed).length;
+                const total = todayTodos.length;
+                const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+                
+                // Update stats
+                document.getElementById('taskCompletionPercent').textContent = `${percentage}%`;
+                document.getElementById('blockCount').textContent = gardenData.block_count || 0;
+                
+                // Update cloudy reaction with inactivity info
+                updateCloudyReaction(percentage, gardenData, updateRes?.days_inactive || 0);
+                
+                // Render garden grid
+                renderGardenGrid(gardenData.block_count || 0, gardenData.is_dead || false);
+                
             } catch (err) {
                 console.log('Garden load error:', err);
             }
         }
-
-        // Add Plant
-        async function addPlant() {
-            const name = document.getElementById('plantName').value;
-            const type = document.getElementById('plantType').value;
-            const health = document.getElementById('plantHealth').value;
+        
+        function updateCloudyReaction(percentage, gardenData, daysInactive = 0) {
+            const reactionImg = document.getElementById('cloudyReaction');
+            const messageEl = document.getElementById('cloudyMessage');
             
-            if (!name || !type) return;
+            if (gardenData.is_dead) {
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy_sad.png') }}";
+                messageEl.textContent = "Your garden died... Start fresh today!";
+            } else if (daysInactive >= 2) {
+                // Day 2+ of inactivity: Cloudy gets ANGRY
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy_angry.png') }}";
+                messageEl.textContent = "I'm getting angry! Do some tasks! 😠";
+            } else if (daysInactive >= 1) {
+                // Day 1 of inactivity: Cloudy gets SAD
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy_sad.png') }}";
+                messageEl.textContent = "I'm sad... You haven't done anything today. 😢";
+            } else if (percentage >= 60) {
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy.png') }}";
+                messageEl.textContent = "Great job! Your garden is thriving! 🌱";
+            } else if (percentage >= 40) {
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy.png') }}";
+                messageEl.textContent = "Good progress! Keep it up tomorrow!";
+            } else if (percentage > 0) {
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy_disappointed.png') }}";
+                messageEl.textContent = "You can do better! Complete more tasks.";
+            } else {
+                reactionImg.src = "{{ url_for('static', filename='sprites/cloudy_disappointed.png') }}";
+                messageEl.textContent = "No tasks completed today. Let's try tomorrow!";
+            }
+        }
+        
+        function renderGardenGrid(blockCount, isDead) {
+            const container = document.getElementById('gardenGrid');
+            container.innerHTML = '';
             
+            // Get today's completion to show pending blocks
+            const today = new Date().toISOString().split('T')[0];
+            const todayTodos = todos[today] || [];
+            const completed = todayTodos.filter(t => t.completed).length;
+            const total = todayTodos.length;
+            const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+            
+            // If 60%+ with 0 blocks, show 1 pending block
+            const shouldShowPendingBlock = percentage >= 60 && blockCount === 0 && total > 0;
+            const displayBlockCount = shouldShowPendingBlock ? 1 : blockCount;
+            
+            if (isDead || (blockCount === 0 && !shouldShowPendingBlock)) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.textContent = isDead ? 'Garden died from inactivity. Plant a new one!' : 'Complete tasks to grow your garden!';
+                emptyMsg.style.textAlign = 'center';
+                emptyMsg.style.color = 'var(--text)';
+                container.appendChild(emptyMsg);
+                
+                // Add replant button for dead gardens
+                if (isDead) {
+                    const replantBtn = document.createElement('button');
+                    replantBtn.textContent = '🌱 Plant New Garden';
+                    replantBtn.style.marginTop = '20px';
+                    replantBtn.style.padding = '10px 20px';
+                    replantBtn.style.backgroundColor = 'var(--primary)';
+                    replantBtn.style.color = 'white';
+                    replantBtn.style.border = 'none';
+                    replantBtn.style.borderRadius = '5px';
+                    replantBtn.style.cursor = 'pointer';
+                    replantBtn.style.fontSize = '1rem';
+                    replantBtn.onclick = async () => {
+                        try {
+                            const res = await fetch('/api/replant-garden', { method: 'POST' });
+                            if (res.ok) {
+                                loadGarden();
+                            }
+                        } catch (err) {
+                            console.error('Replant error:', err);
+                        }
+                    };
+                    container.appendChild(replantBtn);
+                }
+                return;
+            }
+            
+            // Show blocks (either saved or pending)
+            if (shouldShowPendingBlock) {
+                const pendingNote = document.createElement('div');
+                pendingNote.style.textAlign = 'center';
+                pendingNote.style.fontSize = '0.9rem';
+                pendingNote.style.color = 'var(--text-muted)';
+                pendingNote.style.marginBottom = '10px';
+                pendingNote.textContent = '✨ Earning garden block... (Sync to save)';
+                container.appendChild(pendingNote);
+            }
+            
+            // Arrange blocks in a pyramid pattern
+            // Pattern: 1, 2, 3, 2, 1 (or less depending on block count)
+            const patterns = [
+                [1],
+                [1, 1],
+                [1, 2, 1],
+                [2, 2, 1],
+                [2, 3, 2],
+                [2, 3, 2, 1],
+                [3, 3, 2, 1],
+                [3, 3, 3, 1]
+            ];
+            
+            const pattern = patterns[Math.min(displayBlockCount - 1, patterns.length - 1)];
+            let blockIndex = 0;
+            
+            pattern.forEach(rowCount => {
+                const row = document.createElement('div');
+                row.className = 'garden-row';
+                
+                for (let i = 0; i < rowCount && blockIndex < displayBlockCount; i++) {
+                    const block = document.createElement('div');
+                    block.className = 'garden-block';
+                    block.style.backgroundImage = `url("{{ url_for('static', filename='sprites/garden_block.png') }}")`;
+                    row.appendChild(block);
+                    blockIndex++;
+                }
+                
+                container.appendChild(row);
+            });
+            
+            // Add sync button
+            if (shouldShowPendingBlock) {
+                const syncBtn = document.createElement('button');
+                syncBtn.textContent = '💾 Sync Garden';
+                syncBtn.style.marginTop = '20px';
+                syncBtn.style.padding = '10px 20px';
+                syncBtn.style.backgroundColor = 'var(--primary)';
+                syncBtn.style.color = 'white';
+                syncBtn.style.border = 'none';
+                syncBtn.style.borderRadius = '5px';
+                syncBtn.style.cursor = 'pointer';
+                syncBtn.style.fontSize = '0.9rem';
+                syncBtn.onclick = async () => {
+                    try {
+                        syncBtn.disabled = true;
+                        syncBtn.textContent = 'Syncing...';
+                        const res = await fetch('/api/update-garden', { method: 'POST' });
+                        const data = await res.json();
+                        console.log('Garden sync response:', data);
+                        loadGarden();
+                    } catch (err) {
+                        console.error('Sync error:', err);
+                        syncBtn.disabled = false;
+                        syncBtn.textContent = '💾 Sync Garden';
+                    }
+                };
+                container.appendChild(syncBtn);
+            }
+        }
+        
+        // Check and update garden state daily
+        async function updateGardenState() {
             try {
-                await fetch('/api/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        table: 'garden',
-                        data: {plant_name: name, plant_type: type, health_status: health}
-                    })
-                });
-                document.getElementById('plantName').value = '';
-                document.getElementById('plantType').value = '';
-                document.getElementById('plantHealth').value = '';
-                loadGarden();
+                const res = await fetch('/api/update-garden', { method: 'POST' });
+                const data = await res.json();
+                return data;
             } catch (err) {
-                alert('Failed to add plant');
+                console.error('Garden update error:', err);
+                return null;
             }
         }
 
         // Load Friends
         async function loadFriends() {
             try {
-                const res = await fetch('/api/friends');
-                const data = await res.json();
-                const friends = data.friends || [];
-                const html = friends.map(f => `<div class="item"><strong>${f.friend_name}</strong><br>Status: ${f.friend_status}</div>`).join('');
-                document.getElementById('friendsList').innerHTML = html || '<p>No friends yet</p>';
+                // Load friend requests
+                const requestsRes = await fetch('/api/friend-requests');
+                const requestsData = await requestsRes.json();
+                const requests = requestsData.requests || [];
+                
+                // Load friends list
+                const friendsRes = await fetch('/api/friends');
+                const friendsData = await friendsRes.json();
+                const friends = friendsData.friends || [];
+                
+                // Render friend requests
+                document.getElementById('requestCount').textContent = `(${requests.length})`;
+                let requestsHtml = '';
+                if (requests.length === 0) {
+                    requestsHtml = '<p style="color: var(--text-muted);">No pending requests</p>';
+                } else {
+                    requestsHtml = requests.map(r => `
+                        <div style="background: white; padding: 10px; margin: 8px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                            <span><strong>${r.from_username}</strong> sent a friend request</span>
+                            <div>
+                                <button style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;" onclick="acceptFriendRequest(${r.request_id})">✓ Accept</button>
+                                <button style="padding: 5px 10px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="declineFriendRequest(${r.request_id})">✗ Decline</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                document.getElementById('friendRequests').innerHTML = requestsHtml;
+                
+                // Render friends list
+                let friendsHtml = '';
+                if (friends.length === 0) {
+                    friendsHtml = '<p style="color: var(--text-muted);">No friends yet. Add someone!</p>';
+                } else {
+                    friendsHtml = friends.map(f => `
+                        <div style="background: white; padding: 10px; margin: 8px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                            <span><strong>${f.username}</strong></span>
+                            <div>
+                                <button style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;" onclick="viewFriendGarden(${f.id}, '${f.username}')">🌱 View Garden</button>
+                                <button style="padding: 5px 10px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="removeFriend(${f.id})">✕ Remove</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                document.getElementById('friendsList').innerHTML = friendsHtml;
+                
             } catch (err) {
                 console.log('Friends load error:', err);
             }
         }
 
-        // Add Friend
-        async function addFriend() {
-            const name = document.getElementById('friendName').value;
-            const status = document.getElementById('friendStatus').value;
+        // Add Friend by Username
+        async function addFriendByUsername() {
+            const username = document.getElementById('friendUsername').value.trim();
             
-            if (!name) return;
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
             
             try {
-                await fetch('/api/save', {
+                const res = await fetch('/api/add-friend', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        table: 'friends',
-                        data: {friend_name: name, friend_status: status}
-                    })
+                    body: JSON.stringify({username: username})
                 });
-                document.getElementById('friendName').value = '';
-                document.getElementById('friendStatus').value = '';
-                loadFriends();
+                
+                const data = await res.json();
+                
+                if (data.success) {
+                    alert('Friend request sent!');
+                    document.getElementById('friendUsername').value = '';
+                    loadFriends();
+                } else {
+                    alert(data.message || 'Failed to send request');
+                }
             } catch (err) {
-                alert('Failed to add friend');
+                console.error('Add friend error:', err);
+                alert('Error sending friend request');
+            }
+        }
+
+        // Accept Friend Request
+        async function acceptFriendRequest(requestId) {
+            try {
+                const res = await fetch(`/api/accept-friend-request/${requestId}`, {method: 'POST'});
+                if (res.ok) {
+                    loadFriends();
+                }
+            } catch (err) {
+                console.error('Accept request error:', err);
+            }
+        }
+
+        // Decline Friend Request
+        async function declineFriendRequest(requestId) {
+            try {
+                const res = await fetch(`/api/decline-friend-request/${requestId}`, {method: 'POST'});
+                if (res.ok) {
+                    loadFriends();
+                }
+            } catch (err) {
+                console.error('Decline request error:', err);
+            }
+        }
+
+        // Remove Friend
+        async function removeFriend(friendId) {
+            if (!confirm('Remove this friend?')) return;
+            
+            try {
+                const res = await fetch(`/api/remove-friend/${friendId}`, {method: 'POST'});
+                if (res.ok) {
+                    loadFriends();
+                }
+            } catch (err) {
+                console.error('Remove friend error:', err);
+            }
+        }
+
+        // View Friend Garden
+        async function viewFriendGarden(friendId, friendUsername) {
+            try {
+                const res = await fetch(`/api/friend/${friendId}/garden`);
+                const data = await res.json();
+                
+                if (!data.username || res.status !== 200) {
+                    alert(data.message || 'Could not load garden');
+                    return;
+                }
+                
+                // Create and show modal
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;';
+                
+                const content = document.createElement('div');
+                content.style.cssText = 'background: white; padding: 30px; border-radius: 10px; max-width: 500px; width: 90%;';
+                
+                let statusText = '🌱 Garden is thriving!';
+                if (data.is_dead) {
+                    statusText = '💀 Garden died from inactivity';
+                } else if (data.block_count === 0 && !data.has_garden) {
+                    statusText = '🌱 Garden not started yet';
+                } else if (data.block_count === 0) {
+                    statusText = '🌱 Garden starting to grow...';
+                }
+                
+                content.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>${data.username}'s Garden</h2>
+                        <button style="background: none; border: none; font-size: 24px; cursor: pointer;" onclick="this.closest('div').parentElement.parentElement.remove()">×</button>
+                    </div>
+                    <div style="background: var(--bg-light); padding: 20px; border-radius: 8px; text-align: center;">
+                        <p style="margin: 10px 0;"><strong>Blocks:</strong> ${data.block_count}</p>
+                        <p style="margin: 10px 0; color: var(--text-muted);">${statusText}</p>
+                    </div>
+                `;
+                
+                // Simple garden grid display
+                if (!data.is_dead && data.block_count > 0) {
+                    const patterns = [[1], [1,1], [1,2,1], [2,2,1], [2,3,2], [2,3,2,1], [3,3,2,1], [3,3,3,1]];
+                    const pattern = patterns[Math.min(data.block_count - 1, patterns.length - 1)];
+                    let blockIndex = 0;
+                    let gridHtml = '<div style="margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;">';
+                    
+                    pattern.forEach(rowCount => {
+                        gridHtml += '<div style="display: flex; gap: 8px;">';
+                        for (let i = 0; i < rowCount && blockIndex < data.block_count; i++) {
+                            gridHtml += '<div style="width: 60px; height: 60px; background: url("/static/sprites/garden_block.png"); background-size: contain; background-repeat: no-repeat; background-position: center;"></div>';
+                            blockIndex++;
+                        }
+                        gridHtml += '</div>';
+                    });
+                    gridHtml += '</div>';
+                    content.innerHTML += gridHtml;
+                }
+                
+                modal.appendChild(content);
+                document.body.appendChild(modal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) modal.remove();
+                });
+                
+            } catch (err) {
+                console.error('View garden error:', err);
+                alert('Error loading garden');
             }
         }
 

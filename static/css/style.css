@@ -259,3 +259,93 @@ p{line-height:1.6;color:rgba(75,28,113,0.85)}
         font-size: 1rem;
     }
 }
+
+/* Garden Display */
+.garden-stats {
+    display: flex;
+    gap: 24px;
+    margin: 24px 0;
+    padding: 16px;
+    background: #f5f0ff;
+    border-radius: 8px;
+}
+
+.stat-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: rgba(75, 28, 113, 0.7);
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+.cloudy-reaction {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
+    background: linear-gradient(135deg, #fff0ff 0%, #ffe0f0 100%);
+    border-radius: 12px;
+    margin: 24px 0;
+}
+
+.cloudy-reaction img {
+    width: 120px;
+    height: auto;
+}
+
+.cloudy-reaction p {
+    font-size: 1.1rem;
+    color: var(--primary);
+    text-align: center;
+    font-weight: 500;
+}
+
+.garden-display {
+    padding: 40px 20px;
+    background: linear-gradient(180deg, #f0fff8 0%, #e8f5f0 100%);
+    border-radius: 12px;
+    border: 2px solid #7f4ca5;
+}
+
+.garden-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.garden-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.garden-block {
+    width: 300px;
+    height: 300px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.garden-block:hover {
+    transform: scale(1.1);
+}
+
+.garden-block.empty {
+    width: 80px;
+    height: 80px;
+}

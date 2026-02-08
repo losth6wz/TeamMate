@@ -52,23 +52,24 @@ CREATE TABLE tasks (
   timestamp TIMESTAMP DEFAULT NOW()
 );
 
--- Garden table (plants management)
-CREATE TABLE garden (
+-- Garden State table (gamification progression)
+CREATE TABLE garden_state (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  plant_name TEXT NOT NULL,
-  plant_type TEXT,
-  health_status TEXT,
+  block_count INT DEFAULT 0,
+  is_dead BOOLEAN DEFAULT FALSE,
+  last_activity DATE,
   timestamp TIMESTAMP DEFAULT NOW()
 );
 
--- Friends table (friend connections)
+-- Friends table (friend connections and requests)
 CREATE TABLE friends (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  friend_name TEXT NOT NULL,
-  friend_status TEXT,
-  added_date TIMESTAMP DEFAULT NOW()
+  friend_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'declined'
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, friend_id)
 );
 
 -- Groups table (group management)
