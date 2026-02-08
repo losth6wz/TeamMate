@@ -45,6 +45,8 @@
                 <a href="#" class="nav-tab" data-tab="garden">Garden</a>
                 <a href="#" class="nav-tab" data-tab="friends">Friends</a>
                 <a href="#" class="nav-tab" data-tab="groups">Groups</a>
+                <a href="#" class="nav-tab" data-tab="profile">Profile</a>
+                <a href="#" class="nav-tab" data-tab="leaderboard">Leaderboard</a>
                 <div class="nav-right">
                     <span id="userEmail" class="user-email"></span>
                     <button id="logoutBtn" class="logout-btn">Logout</button>
@@ -209,6 +211,74 @@
                         
                         <!-- Delete Group Button -->
                         <button id="deleteGroupBtn" onclick="deleteGroup()" style="width: 100%; padding: 10px; background: #ff6b6b; color: white; border: none; border-radius: 5px; cursor: pointer;">Delete Group</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Profile Tab -->
+            <div id="profile" class="tab-content">
+                <h1>Your Profile</h1>
+                <p>Edit your profile and bio</p>
+                
+                <div style="background: var(--bg-light); padding: 30px; border-radius: 8px; max-width: 500px;">
+                    <!-- Profile Picture -->
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <img id="profilePic" src="https://via.placeholder.com/100" alt="Profile" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary);">
+                        <div style="margin-top: 10px;">
+                            <input type="text" id="profilePicUrl" placeholder="Paste image URL here" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px;">
+                            <button onclick="updateProfilePic()" style="width: 100%; padding: 8px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer;">Update Picture</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Bio -->
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: bold;">Bio</label>
+                        <textarea id="profileBio" placeholder="Tell your friends about yourself..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; min-height: 100px; font-family: inherit;"></textarea>
+                    </div>
+                    
+                    <!-- Save Button -->
+                    <button onclick="saveProfile()" style="width: 100%; padding: 10px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem;">Save Profile</button>
+                </div>
+            </div>
+            
+            <!-- Leaderboard Tab -->
+            <div id="leaderboard" class="tab-content">
+                <h1>Leaderboard 🏆</h1>
+                <p>Top gardeners by blocks grown</p>
+                
+                <div style="background: var(--bg-light); border-radius: 8px; overflow: hidden;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--primary); color: white;">
+                                <th style="padding: 15px; text-align: left;">Rank</th>
+                                <th style="padding: 15px; text-align: left;">User</th>
+                                <th style="padding: 15px; text-align: center;">Garden Blocks 🌸</th>
+                                <th style="padding: 15px; text-align: center;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardList">
+                            <tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">Loading leaderboard...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Friend Profile Modal -->
+            <div id="friendProfileModal" class="modal">
+                <div class="modal-content" style="max-width: 500px;">
+                    <span style="float: right; cursor: pointer; font-size: 1.5rem; color: #666;" onclick="closeFriendProfile()">&times;</span>
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <img id="friendProfilePic" src="https://via.placeholder.com/80" alt="Profile" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 3px solid var(--primary);">
+                        <h2 id="friendProfileName" style="margin: 15px 0 5px 0;"></h2>
+                        <p id="friendProfileBio" style="color: var(--text-muted); margin: 0; font-style: italic;"></p>
+                    </div>
+                    
+                    <!-- Friend Garden Preview -->
+                    <div style="background: rgba(127, 76, 165, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4 style="margin-top: 0;">Garden 🌸</h4>
+                        <div id="friendGardenPreview" style="display: flex; justify-content: center; min-height: 120px; align-items: center;">
+                            <p style="color: var(--text-muted);">Loading garden...</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -378,6 +448,8 @@
                 if (tabName === 'garden') loadGarden();
                 if (tabName === 'friends') loadFriends();
                 if (tabName === 'groups') loadGroups();
+                if (tabName === 'profile') loadProfile();
+                if (tabName === 'leaderboard') loadLeaderboard();
             });
         });
 
@@ -789,7 +861,7 @@
                         <div style="background: white; padding: 10px; margin: 8px 0; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
                             <span><strong>${f.username}</strong></span>
                             <div>
-                                <button style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;" onclick="viewFriendGarden(${f.id}, '${f.username}')">🌱 View Garden</button>
+                                <button style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;" onclick="viewFriendProfile(${f.id}, '${f.username}')">👤 View Profile</button>
                                 <button style="padding: 5px 10px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="removeFriend(${f.id})">✕ Remove</button>
                             </div>
                         </div>
@@ -1515,6 +1587,150 @@
                 alert('Failed to save focus time');
             }
         }
+        
+        // Profile Functions
+        async function loadProfile() {
+            try {
+                const res = await fetch(`/api/profile/${currentUser}`);
+                const data = await res.json();
+                
+                document.getElementById('profilePic').src = data.pfp_url || 'https://via.placeholder.com/100';
+                document.getElementById('profilePicUrl').value = data.pfp_url || '';
+                document.getElementById('profileBio').value = data.bio || '';
+            } catch (err) {
+                console.error('Load profile error:', err);
+            }
+        }
+        
+        async function updateProfilePic() {
+            const url = document.getElementById('profilePicUrl').value.trim();
+            if (!url) {
+                alert('Please enter an image URL');
+                return;
+            }
+            
+            document.getElementById('profilePic').src = url;
+            // Save will be called when user clicks Save Profile
+        }
+        
+        async function saveProfile() {
+            const bio = document.getElementById('profileBio').value;
+            const pfp_url = document.getElementById('profilePicUrl').value;
+            
+            try {
+                const res = await fetch('/api/profile/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({bio, pfp_url})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Profile saved!');
+                } else {
+                    alert(data.error || 'Failed to save profile');
+                }
+            } catch (err) {
+                alert('Failed to save profile');
+                console.error(err);
+            }
+        }
+        
+        // Leaderboard Functions
+        async function loadLeaderboard() {
+            try {
+                const res = await fetch('/api/leaderboard');
+                const data = await res.json();
+                const leaderboard = data.leaderboard || [];
+                
+                const tbody = document.getElementById('leaderboardList');
+                if (leaderboard.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">No users yet</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = leaderboard.map((user, idx) => `
+                    <tr style="border-bottom: 1px solid #ddd; background: ${idx === 0 ? 'rgba(127, 76, 165, 0.1)' : 'transparent'};">
+                        <td style="padding: 15px;">
+                            ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : user.rank}
+                        </td>
+                        <td style="padding: 15px;">
+                            <img src="${user.pfp_url || 'https://via.placeholder.com/40'}" alt="pfp" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 10px; vertical-align: middle;">
+                            <span style="vertical-align: middle;">${user.username}</span>
+                        </td>
+                        <td style="padding: 15px; text-align: center; font-weight: bold; color: var(--primary);">${user.block_count}</td>
+                        <td style="padding: 15px; text-align: center;">
+                            <button onclick="viewFriendProfile(${user.id}, '${user.username}')" style="padding: 5px 10px; background: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9rem;">Profile</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Load leaderboard error:', err);
+                document.getElementById('leaderboardList').innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ff6b6b;">Failed to load leaderboard</td></tr>';
+            }
+        }
+
+        // Friend Profile Functions
+        async function viewFriendProfile(userId, username) {
+            try {
+                // Fetch friend's profile
+                const profileRes = await fetch(`/api/profile/${userId}`);
+                const profileData = await profileRes.json();
+                
+                if (!profileData.success) {
+                    alert('Unable to view this profile');
+                    return;
+                }
+                
+                // Display profile info
+                document.getElementById('friendProfileName').textContent = username;
+                document.getElementById('friendProfilePic').src = profileData.profile.pfp_url || 'https://via.placeholder.com/80';
+                document.getElementById('friendProfileBio').textContent = profileData.profile.bio || '(No bio)';
+                
+                // Fetch friend's garden state
+                const gardenRes = await fetch(`/api/user-garden/${userId}`);
+                const gardenData = await gardenRes.json();
+                
+                if (gardenData.success && gardenData.garden_state) {
+                    const blocks = gardenData.garden_state.blocks || 0;
+                    let gardenHtml = `<p style="text-align: center; margin: 0; margin-bottom: 10px; font-weight: bold;">🌸 ${blocks} blocks grown</p>`;
+                    
+                    // Display small garden preview (first 12 blocks max)
+                    if (blocks > 0) {
+                        gardenHtml += '<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; justify-content: center;">';
+                        for (let i = 0; i < Math.min(blocks, 12); i++) {
+                            gardenHtml += '<div style="width: 50px; height: 50px; background: #7f4ca5; border-radius: 8px; border: 2px solid #5a2e7a;"></div>';
+                        }
+                        if (blocks > 12) {
+                            gardenHtml += `<div style="width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; background: rgba(127, 76, 165, 0.5); border-radius: 8px; border: 2px solid #5a2e7a; font-weight: bold; color: #5a2e7a;">+${blocks - 12}</div>`;
+                        }
+                        gardenHtml += '</div>';
+                    } else {
+                        gardenHtml += '<p style="text-align: center; color: var(--text-muted); margin: 0;">Garden not yet started</p>';
+                    }
+                    document.getElementById('friendGardenPreview').innerHTML = gardenHtml;
+                } else {
+                    document.getElementById('friendGardenPreview').innerHTML = '<p style="color: var(--text-muted); text-align: center;">Garden data not available</p>';
+                }
+                
+                // Show modal
+                document.getElementById('friendProfileModal').classList.add('active');
+            } catch (err) {
+                alert('Error loading profile');
+                console.error('Profile load error:', err);
+            }
+        }
+
+        function closeFriendProfile() {
+            document.getElementById('friendProfileModal').classList.remove('active');
+        }
+
+        // Close modal when clicking outside it
+        window.addEventListener('click', function(event) {
+            const modal = document.getElementById('friendProfileModal');
+            if (event.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
     </script>
 </body>
 </html>

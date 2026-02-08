@@ -273,6 +273,39 @@ def replant_garden():
         print(f"Garden replant error: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/user-garden/<int:user_id>', methods=['GET'])
+@login_required
+def get_user_garden(user_id):
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'error': 'Database error'}), 500
+        
+        # Fetch the user's garden state
+        result = supabase.table('garden_state').select('*').eq('user_id', user_id).execute()
+        
+        if result.data and len(result.data) > 0:
+            garden_state = result.data[0]
+            return jsonify({
+                'success': True,
+                'garden_state': {
+                    'blocks': garden_state.get('block_count', 0),
+                    'is_dead': garden_state.get('is_dead', False),
+                    'last_activity': garden_state.get('last_activity')
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'garden_state': {
+                    'blocks': 0,
+                    'is_dead': False,
+                    'last_activity': None
+                }
+            })
+    except Exception as e:
+        print(f"Get user garden error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/save', methods=['POST'])
 @login_required
 def save_data():
@@ -776,6 +809,111 @@ def get_group_messages(group_id):
     except Exception as e:
         print(f"Get messages error: {e}")
         return jsonify({'messages': []})
+
+@app.route('/api/leaderboard', methods=['GET'])
+@login_required
+def get_leaderboard():
+    try:
+        # Get all users with their garden block counts
+        users = supabase.table('users').select('id, username').execute()
+        
+        leaderboard = []
+        for user in (users.data or []):
+            garden = supabase.table('garden_state').select('block_count').eq('user_id', user['id']).execute()
+            profile = supabase.table('user_profiles').select('pfp_url').eq('user_id', user['id']).execute()
+            
+            block_count = garden.data[0]['block_count'] if garden.data else 0
+            pfp_url = profile.data[0]['pfp_url'] if profile.data else ''
+            
+            leaderboard.append({
+                'id': user['id'],
+                'username': user['username'],
+                'block_count': block_count,
+                'pfp_url': pfp_url
+            })
+        
+        # Sort by block_count descending
+        leaderboard.sort(key=lambda x: x['block_count'], reverse=True)
+        
+        # Add rank
+        for idx, user in enumerate(leaderboard, 1):
+            user['rank'] = idx
+        
+        return jsonify({'leaderboard': leaderboard})
+    except Exception as e:
+        print(f"Leaderboard error: {e}")
+        return jsonify({'leaderboard': []})
+
+@app.route('/api/profile/update', methods=['POST'])
+@login_required
+def update_profile():
+    try:
+        user_id = session.get('user_id')
+        payload = request.json
+        bio = payload.get('bio', '')
+        pfp_url = payload.get('pfp_url', '')
+        
+        # Check if profile exists
+        existing = supabase.table('user_profiles').select('id').eq('user_id', user_id).execute()
+        
+        if existing.data:
+            # Update profile
+            supabase.table('user_profiles').update({
+                'bio': bio,
+                'pfp_url': pfp_url
+            }).eq('user_id', user_id).execute()
+        else:
+            # Create profile
+            supabase.table('user_profiles').insert({
+                'user_id': user_id,
+                'bio': bio,
+                'pfp_url': pfp_url
+            }).execute()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Update profile error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/profile/<int:user_id>', methods=['GET'])
+@login_required
+def get_profile(user_id):
+    try:
+        current_user_id = session.get('user_id')
+        
+        # Check if friends (if viewing someone else's profile)
+        if user_id != current_user_id:
+            friendship = supabase.table('friends').select('status').eq('user_id', current_user_id).eq('friend_id', user_id).execute()
+            if not friendship.data or friendship.data[0]['status'] != 'accepted':
+                # Check reverse direction
+                friendship = supabase.table('friends').select('status').eq('user_id', user_id).eq('friend_id', current_user_id).execute()
+                if not friendship.data or friendship.data[0]['status'] != 'accepted':
+                    return jsonify({'success': False, 'error': 'Not friends'}), 403
+        
+        # Get user info
+        user = supabase.table('users').select('id, username').eq('id', user_id).execute()
+        if not user.data:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        
+        # Get profile
+        profile = supabase.table('user_profiles').select('*').eq('user_id', user_id).execute()
+        
+        # Get garden blocks
+        garden = supabase.table('garden_state').select('block_count').eq('user_id', user_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'profile': {
+                'id': user.data[0]['id'],
+                'username': user.data[0]['username'],
+                'bio': profile.data[0]['bio'] if profile.data else '',
+                'pfp_url': profile.data[0]['pfp_url'] if profile.data else '',
+                'block_count': garden.data[0]['block_count'] if garden.data else 0
+            }
+        })
+    except Exception as e:
+        print(f"Get profile error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

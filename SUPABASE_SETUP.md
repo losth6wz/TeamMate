@@ -73,6 +73,15 @@ CREATE TABLE friends (
   UNIQUE(user_id, friend_id)
 );
 
+-- User Profiles table (bio and profile pictures)
+CREATE TABLE user_profiles (
+  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+  user_id BIGINT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  bio TEXT DEFAULT '',
+  pfp_url TEXT DEFAULT '',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Groups table (group management)
 CREATE TABLE groups (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
