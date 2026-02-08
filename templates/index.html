@@ -11,26 +11,29 @@
     <!-- Auth Modal -->
     <div id="authModal" class="modal active">
         <div class="modal-content">
-            <h2>Welcome to TeamMate</h2>
-            <div class="auth-tabs">
-                <button class="auth-tab-btn active" id="loginTab">Login</button>
-                <button class="auth-tab-btn" id="signupTab">Sign Up</button>
+            <img id="cloudySprite" class="cloudy-sprite" src="{{ url_for('static', filename='sprites/cloudy.png') }}" alt="cloudy">
+            <div class="modal-inner">
+                <h2>Welcome to TeamMate</h2>
+                <div class="auth-tabs">
+                    <button class="auth-tab-btn active" id="loginTab">Login</button>
+                    <button class="auth-tab-btn" id="signupTab">Sign Up</button>
+                </div>
+                
+                <!-- Login Form -->
+                <form id="loginForm" class="auth-form active">
+                    <input type="text" placeholder="Username" required>
+                    <input type="password" placeholder="Password" required>
+                    <button type="submit">Login</button>
+                </form>
+                
+                <!-- Signup Form -->
+                <form id="signupForm" class="auth-form">
+                    <input type="text" placeholder="Username" required>
+                    <input type="password" placeholder="Password (min 6 chars)" required>
+                    <input type="password" placeholder="Confirm Password" required>
+                    <button type="submit">Sign Up</button>
+                </form>
             </div>
-            
-            <!-- Login Form -->
-            <form id="loginForm" class="auth-form active">
-                <input type="text" placeholder="Username" required>
-                <input type="password" placeholder="Password" required>
-                <button type="submit">Login</button>
-            </form>
-            
-            <!-- Signup Form -->
-            <form id="signupForm" class="auth-form">
-                <input type="text" placeholder="Username" required>
-                <input type="password" placeholder="Password (min 6 chars)" required>
-                <input type="password" placeholder="Confirm Password" required>
-                <button type="submit">Sign Up</button>
-            </form>
         </div>
     </div>
 
@@ -39,7 +42,6 @@
         <nav class="navbar">
             <div class="nav-container">
                 <a href="#" class="nav-tab active" data-tab="dashboard">Dashboard</a>
-                <a href="#" class="nav-tab" data-tab="garden">Garden</a>
                 <a href="#" class="nav-tab" data-tab="friends">Friends</a>
                 <a href="#" class="nav-tab" data-tab="groups">Groups</a>
                 <div class="nav-right">
@@ -53,30 +55,52 @@
             <!-- Dashboard Tab -->
             <div id="dashboard" class="tab-content active">
                 <h1>Dashboard</h1>
-                <p>Your task completion at a glance</p>
-                <div class="chart-container">
-                    <canvas id="productivityChart"></canvas>
+                <p>Your productivity at a glance</p>
+                
+                <!-- Calendar & To-Do List Section -->
+                <div class="calendar-section">
+                    <div class="calendar-container">
+                        <h3>Calendar</h3>
+                        <div class="calendar-header">
+                            <button onclick="prevMonth()">←</button>
+                            <span id="calendarMonth"></span>
+                            <button onclick="nextMonth()">→</button>
+                        </div>
+                        <div id="calendar" class="calendar-grid"></div>
+                    </div>
+                    
+                    <div class="todo-container">
+                        <h3>Tasks for <span id="selectedDate">Today</span></h3>
+                        <div class="add-todo">
+                            <input type="text" id="todoInput" placeholder="Add a task...">
+                            <button onclick="addTodo()">Add</button>
+                        </div>
+                        <div id="todoList" class="todo-list"></div>
+                    </div>
                 </div>
-                <div class="productivity-form">
-                    <h3>Log Tasks Completed</h3>
-                    <input type="text" id="taskName" placeholder="Task Name (optional)">
-                    <input type="number" id="tasksCompleted" placeholder="Tasks Completed" min="0">
-                    <button onclick="saveProductivity()">Save Progress</button>
+                
+                <!-- Productivity Chart -->
+                <div class="chart-section">
+                    <h3>Productivity Trend</h3>
+                    <div class="chart-container">
+                        <canvas id="productivityChart"></canvas>
+                    </div>
                 </div>
-                <div id="tasksList" class="tasks-list"></div>
-            </div>
-            
-            <!-- Garden Tab -->
-            <div id="garden" class="tab-content">
-                <h1>Garden</h1>
-                <p>Manage and view your garden plants</p>
-                <div id="gardenList"></div>
-                <div class="garden-form">
-                    <h3>Add Plant</h3>
-                    <input type="text" id="plantName" placeholder="Plant Name">
-                    <input type="text" id="plantType" placeholder="Plant Type">
-                    <input type="text" id="plantHealth" placeholder="Health Status">
-                    <button onclick="addPlant()">Add Plant</button>
+                
+                <!-- Focus Session Timer -->
+                <div class="focus-session">
+                    <h3>Focus Session</h3>
+                    <div class="session-display">
+                        <div id="timerDisplay" class="timer-display">00:00:00</div>
+                        <button id="startSessionBtn" class="start-session-btn" onclick="startSession()">Start Session</button>
+                        <button id="stopSessionBtn" class="stop-session-btn hidden" onclick="stopSession()">Stop Session</button>
+                    </div>
+                </div>
+                
+                <!-- Task History Log -->
+                <div class="task-history">
+                    <h3>Task History</h3>
+                    <div id="tasksList" class="tasks-list"></div>
                 </div>
             </div>
             
@@ -111,6 +135,33 @@
     <script>
         let currentUser = null;
         let productivityChart = null;
+        let sessionActive = false;
+        let sessionStartTime = null;
+        let sessionTimer = null;
+        let sessionDuration = 0;
+        const cloudyOpen = "{{ url_for('static', filename='sprites/cloudy.png') }}";
+        const cloudyClosed = "{{ url_for('static', filename='sprites/cloudy_eyes_closed.png') }}";
+
+        function setCloudyEyes(closed) {
+            const img = document.getElementById('cloudySprite');
+            if (!img) return;
+            
+            // Fade out
+            img.style.opacity = '0';
+            
+            // Change image after fade completes
+            setTimeout(() => {
+                img.src = closed ? cloudyClosed : cloudyOpen;
+                // Fade back in
+                img.style.opacity = '1';
+            }, 150);
+        }
+
+        // Toggle cloudy eyes when password inputs are focused/blurred
+        document.querySelectorAll('#loginForm input[type="password"], #signupForm input[type="password"]').forEach(inp => {
+            inp.addEventListener('focus', () => setCloudyEyes(true));
+            inp.addEventListener('blur', () => setCloudyEyes(false));
+        });
 
         // Auth Tab Switching
         document.getElementById('loginTab').addEventListener('click', () => {
@@ -218,78 +269,98 @@
             });
         });
 
-        // Load Dashboard with Chart
+        // Load Dashboard with Chart (Line Chart)
         async function loadDashboard() {
             try {
                 const res = await fetch('/api/dashboard');
                 const data = await res.json();
                 const tasks = data.tasks || [];
                 
-                // Group tasks by date and create entries for stacking
-                const groupedByDate = {};
+                // Count tasks and focus time per day
+                const tasksByDate = {};
+                const focusTimeByDate = {};
                 tasks.forEach(t => {
-                    if (!groupedByDate[t.date]) {
-                        groupedByDate[t.date] = [];
+                    if (!tasksByDate[t.date]) {
+                        tasksByDate[t.date] = 0;
+                        focusTimeByDate[t.date] = 0;
                     }
-                    groupedByDate[t.date].push(t.tasks_completed || 0);
+                    tasksByDate[t.date]++;
+                    // Add focus time in minutes (divide by 60 to convert from seconds)
+                    if (t.focus_time) {
+                        focusTimeByDate[t.date] += t.focus_time / 60;
+                    }
                 });
                 
                 // Sort dates
-                const sortedDates = Object.keys(groupedByDate).sort();
-                
-                // Create datasets for each task entry (for stacking)
-                const datasets = [];
-                let maxIndex = Math.max(...Object.values(groupedByDate).map(arr => arr.length));
-                let maxTasksPerDay = Math.max(...sortedDates.map(date => groupedByDate[date].reduce((a, b) => a + b, 0)), 10);
-                
-                for (let i = 0; i < maxIndex; i++) {
-                    const dataForIndex = sortedDates.map(date => groupedByDate[date][i] || 0);
-                    
-                    // Skip if all zeros
-                    if (dataForIndex.every(v => v === 0)) continue;
-                    
-                    datasets.push({
-                        label: `Task Entry ${i + 1}`,
-                        data: dataForIndex,
-                        backgroundColor: [
-                            'rgba(127, 76, 165, 0.8)',
-                            'rgba(181, 126, 220, 0.8)',
-                            'rgba(219, 182, 238, 0.8)',
-                            'rgba(200, 150, 200, 0.8)',
-                            'rgba(160, 100, 170, 0.8)'
-                        ][i % 5],
-                        borderColor: '#4b1c71',
-                        borderWidth: 1
-                    });
-                }
+                const sortedDates = Object.keys(tasksByDate).sort();
+                const taskCounts = sortedDates.map(date => tasksByDate[date]);
+                const focusTimes = sortedDates.map(date => {
+                    const time = focusTimeByDate[date] || 0;
+                    return Math.round(time * 10) / 10; // Round to 1 decimal place
+                });
                 
                 const ctx = document.getElementById('productivityChart');
                 if (productivityChart) productivityChart.destroy();
                 
                 productivityChart = new Chart(ctx, {
-                    type: 'bar',
+                    type: 'line',
                     data: {
                         labels: sortedDates.length ? sortedDates : ['No data yet'],
-                        datasets: datasets
+                        datasets: [
+                            {
+                                label: 'Tasks Completed',
+                                data: taskCounts,
+                                borderColor: '#7f4ca5',
+                                backgroundColor: 'rgba(127, 76, 165, 0.1)',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                pointRadius: 6,
+                                pointBackgroundColor: '#4b1c71',
+                                pointBorderColor: '#7f4ca5',
+                                pointBorderWidth: 2,
+                                tension: 0.4,
+                                fill: true,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Focus Time (minutes)',
+                                data: focusTimes,
+                                borderColor: '#ff69b4',
+                                backgroundColor: 'rgba(255, 105, 180, 0.1)',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                pointRadius: 6,
+                                pointBackgroundColor: '#ff1493',
+                                pointBorderColor: '#ff69b4',
+                                pointBorderWidth: 2,
+                                tension: 0.4,
+                                fill: true,
+                                yAxisID: 'y1'
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
                         plugins: {
                             legend: {
-                                display: false
+                                labels: {color: '#4b1c71'}
                             }
                         },
                         scales: {
                             x: {
-                                stacked: true,
                                 ticks: {color: '#4b1c71'},
                                 grid: {color: '#dbb6ee'}
                             },
                             y: {
-                                stacked: true,
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
                                 beginAtZero: true,
-                                max: maxTasksPerDay,
                                 ticks: {
                                     color: '#4b1c71',
                                     stepSize: 1,
@@ -297,84 +368,52 @@
                                         return Math.floor(value);
                                     }
                                 },
-                                grid: {color: '#dbb6ee'}
+                                grid: {color: '#dbb6ee'},
+                                title: {
+                                    display: true,
+                                    text: 'Tasks'
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                beginAtZero: true,
+                                ticks: {
+                                    color: '#ff69b4',
+                                    stepSize: 0.5,
+                                    callback: function(value) {
+                                        return value.toFixed(1);
+                                    }
+                                },
+                                grid: {drawOnChartArea: false},
+                                title: {
+                                    display: true,
+                                    text: 'Focus Time (min)'
+                                }
                             }
                         }
                     }
                 });
                 
-                // Display tasks list for deletion
+                // Load calendar and todos
+                initializeCalendar();
                 displayTasksList(tasks);
             } catch (err) {
                 console.log('Dashboard load error:', err);
             }
         }
-        
-        // Display tasks list
+        // Display tasks list (read-only log)
         function displayTasksList(tasks) {
             const html = tasks.length ? tasks.map((t, idx) => `
                 <div class="task-item">
                     <div class="task-info">
-                        <strong>${t.task_name || 'Unnamed Task'}</strong>
-                        <span class="task-date">${t.date}: ${t.tasks_completed} task(s)</span>
+                        <strong>${t.task_name || 'Task'}</strong>
+                        <span class="task-date">${t.date}</span>
                     </div>
-                    <button onclick="deleteTask(${t.id})" class="delete-btn">Delete</button>
                 </div>
-            `).join('') : '<p>No tasks logged yet</p>';
+            `).join('') : '<p>No task history yet</p>';
             document.getElementById('tasksList').innerHTML = html;
-        }
-        
-        // Delete task
-        async function deleteTask(taskId) {
-            try {
-                const res = await fetch(`/api/delete-task/${taskId}`, {
-                    method: 'DELETE'
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert('Task deleted!');
-                    loadDashboard();
-                } else {
-                    alert('Failed to delete task');
-                }
-            } catch (err) {
-                alert('Delete failed: ' + err);
-            }
-        }
-
-        // Save Productivity
-        async function saveProductivity() {
-            const taskName = document.getElementById('taskName').value || 'Unnamed Task';
-            const tasksCompleted = parseInt(document.getElementById('tasksCompleted').value);
-            
-            if (!tasksCompleted && tasksCompleted !== 0) {
-                alert('Please enter tasks completed');
-                return;
-            }
-            
-            try {
-                const res = await fetch('/api/save', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        table: 'tasks',
-                        data: {
-                            date: new Date().toISOString().split('T')[0],
-                            task_name: taskName,
-                            tasks_completed: tasksCompleted
-                        }
-                    })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert('Progress saved!');
-                    document.getElementById('taskName').value = '';
-                    document.getElementById('tasksCompleted').value = '';
-                    loadDashboard();
-                }
-            } catch (err) {
-                alert('Save failed: ' + err);
-            }
         }
 
         // Load Garden
@@ -492,15 +531,255 @@
 
         // Load all data
         function loadAllData() {
-            loadGarden();
             loadFriends();
             loadGroups();
         }
 
-        // Focus Score Slider
-        document.getElementById('focusScore').addEventListener('input', (e) => {
-            document.getElementById('focusScoreValue').textContent = e.target.value;
-        });
+        // ======== CALENDAR & TODO FUNCTIONS ========
+        let currentMonth = new Date();
+        let selectedDate = new Date().toISOString().split('T')[0];
+        let todos = JSON.parse(localStorage.getItem('todos')) || {};
+
+        function initializeCalendar() {
+            renderCalendar();
+            renderTodos();
+        }
+
+        function renderCalendar() {
+            const year = currentMonth.getFullYear();
+            const month = currentMonth.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const daysInMonth = lastDay.getDate();
+            const startingDayOfWeek = firstDay.getDay();
+
+            document.getElementById('calendarMonth').textContent = 
+                currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            let html = '<div class="calendar-weekdays">';
+            const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            weekDays.forEach(day => html += `<div class="weekday">${day}</div>`);
+            html += '</div><div class="calendar-days">';
+
+            // Empty cells before month starts
+            for (let i = 0; i < startingDayOfWeek; i++) {
+                html += '<div class="calendar-day empty"></div>';
+            }
+
+            // Days of month
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isSelected = dateStr === selectedDate;
+                const hasTask = todos[dateStr] && todos[dateStr].length > 0;
+                html += `<div class="calendar-day ${isSelected ? 'selected' : ''} ${hasTask ? 'has-task' : ''}" onclick="selectDate('${dateStr}')">${day}</div>`;
+            }
+
+            html += '</div>';
+            document.getElementById('calendar').innerHTML = html;
+        }
+
+        async function selectDate(dateStr) {
+            selectedDate = dateStr;
+            document.getElementById('selectedDate').textContent = new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            renderCalendar();
+            renderTodos();
+        }
+
+        function prevMonth() {
+            currentMonth.setMonth(currentMonth.getMonth() - 1);
+            renderCalendar();
+        }
+
+        function nextMonth() {
+            currentMonth.setMonth(currentMonth.getMonth() + 1);
+            renderCalendar();
+        }
+
+        function addTodo() {
+            const input = document.getElementById('todoInput');
+            const task = input.value.trim();
+            if (!task) return;
+
+            if (!todos[selectedDate]) {
+                todos[selectedDate] = [];
+            }
+            todos[selectedDate].push({
+                id: Date.now(),
+                text: task,
+                completed: false,
+                completedDate: null
+            });
+            localStorage.setItem('todos', JSON.stringify(todos));
+            input.value = '';
+            renderTodos();
+            renderCalendar();
+        }
+
+        async function toggleTodo(id) {
+            const task = todos[selectedDate].find(t => t.id === id);
+            if (task) {
+                task.completed = !task.completed;
+                
+                try {
+                    if (task.completed) {
+                        task.completedDate = new Date().toISOString().split('T')[0];
+                        
+                        // Save to backend when task is completed
+                        await fetch('/api/save', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                table: 'tasks',
+                                data: {
+                                    date: selectedDate,
+                                    task_name: task.text,
+                                    tasks_completed: 1
+                                }
+                            })
+                        });
+                    } else {
+                        // Remove from backend when task is unchecked
+                        await fetch('/api/delete-task', {
+                            method: 'DELETE',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                date: selectedDate,
+                                task_name: task.text
+                            })
+                        });
+                    }
+                    // Refresh chart to show updated data
+                    loadDashboard();
+                } catch (err) {
+                    console.error('Failed to update task:', err);
+                }
+                
+                localStorage.setItem('todos', JSON.stringify(todos));
+                renderTodos();
+            }
+        }
+
+        function deleteTodo(id) {
+            todos[selectedDate] = todos[selectedDate].filter(t => t.id !== id);
+            localStorage.setItem('todos', JSON.stringify(todos));
+            renderTodos();
+            renderCalendar();
+        }
+
+        function renderTodos() {
+            const todayTodos = todos[selectedDate] || [];
+            const today = new Date().toISOString().split('T')[0];
+            
+            let html = '';
+            todayTodos.forEach(todo => {
+                const isStale = todo.completed && todo.completedDate && todo.completedDate !== today;
+                html += `
+                    <div class="todo-item ${todo.completed ? 'completed' : ''} ${isStale ? 'stale' : ''}">
+                        <input type="checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo(${todo.id})">
+                        <span class="todo-text">${todo.text}</span>
+                        <button class="todo-delete" onclick="deleteTodo(${todo.id})">×</button>
+                    </div>
+                `;
+            });
+            document.getElementById('todoList').innerHTML = html || '<p class="no-todos">No tasks for this day</p>';
+        }
+
+        // Clean up stale todos (remove completed tasks from yesterday)
+        setInterval(() => {
+            const today = new Date().toISOString().split('T')[0];
+            Object.keys(todos).forEach(date => {
+                todos[date] = todos[date].filter(todo => {
+                    if (todo.completed && todo.completedDate && todo.completedDate !== today) {
+                        return false; // Remove stale task
+                    }
+                    return true;
+                });
+            });
+            localStorage.setItem('todos', JSON.stringify(todos));
+        }, 60000); // Check every minute
+
+        // ======== FOCUS SESSION TIMER ========
+        function startSession() {
+            sessionActive = true;
+            sessionStartTime = Date.now();
+            sessionDuration = 0;
+            
+            document.getElementById('startSessionBtn').classList.add('hidden');
+            document.getElementById('stopSessionBtn').classList.remove('hidden');
+            
+            sessionTimer = setInterval(() => {
+                sessionDuration = Math.floor((Date.now() - sessionStartTime) / 1000);
+                const hours = Math.floor(sessionDuration / 3600);
+                const minutes = Math.floor((sessionDuration % 3600) / 60);
+                const seconds = sessionDuration % 60;
+                
+                document.getElementById('timerDisplay').textContent = 
+                    `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        async function stopSession() {
+            sessionActive = false;
+            clearInterval(sessionTimer);
+            
+            const focusTime = sessionDuration; // in seconds
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Only save if session is at least 30 seconds
+            if (focusTime < 30) {
+                alert(`Session too short. Minimum 30 seconds required. You had ${focusTime} seconds.`);
+                
+                // Reset timer display and buttons
+                document.getElementById('timerDisplay').textContent = '00:00:00';
+                document.getElementById('startSessionBtn').classList.remove('hidden');
+                document.getElementById('stopSessionBtn').classList.add('hidden');
+                return;
+            }
+            
+            try {
+                // First, try to update existing focus session for today
+                const updateRes = await fetch('/api/update-focus', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        date: today,
+                        focus_time: focusTime
+                    })
+                });
+                
+                const updateData = await updateRes.json();
+                
+                // If update failed (no existing session), create a new one
+                if (!updateData.success) {
+                    await fetch('/api/save', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            table: 'tasks',
+                            data: {
+                                date: today,
+                                task_name: 'Focus Session',
+                                tasks_completed: 0,
+                                focus_time: focusTime
+                            }
+                        })
+                    });
+                }
+                
+                // Reset timer display and buttons
+                document.getElementById('timerDisplay').textContent = '00:00:00';
+                document.getElementById('startSessionBtn').classList.remove('hidden');
+                document.getElementById('stopSessionBtn').classList.add('hidden');
+                
+                // Refresh chart to show new focus time
+                loadDashboard();
+                
+                alert(`Focus session ended! Duration: ${Math.floor(focusTime / 60)} minutes ${focusTime % 60} seconds`);
+            } catch (err) {
+                console.error('Failed to save focus time:', err);
+                alert('Failed to save focus time');
+            }
+        }
     </script>
 </body>
 </html>

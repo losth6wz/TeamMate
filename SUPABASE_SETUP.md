@@ -48,6 +48,7 @@ CREATE TABLE tasks (
   date DATE NOT NULL,
   task_name TEXT DEFAULT 'Unnamed Task',
   tasks_completed INT DEFAULT 0,
+  focus_time INT DEFAULT 0,
   timestamp TIMESTAMP DEFAULT NOW()
 );
 

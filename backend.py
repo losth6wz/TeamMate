@@ -148,19 +148,46 @@ def save_data():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/delete-task/<int:task_id>', methods=['DELETE'])
+@app.route('/api/delete-task', methods=['DELETE'])
 @login_required
-def delete_task(task_id):
+def delete_task():
     try:
         if not supabase:
             return jsonify({'success': False, 'error': 'Database not configured'}), 500
         user_id = session.get('user_id')
-        # Verify task belongs to user before deleting
-        task = supabase.table('tasks').select('*').eq('id', task_id).eq('user_id', user_id).execute()
-        if not task.data:
-            return jsonify({'error': 'Task not found'}), 404
-        supabase.table('tasks').delete().eq('id', task_id).execute()
+        payload = request.json
+        date = payload.get('date')
+        task_name = payload.get('task_name')
+        
+        # Delete task by date and task_name
+        supabase.table('tasks').delete().eq('user_id', user_id).eq('date', date).eq('task_name', task_name).execute()
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/update-focus', methods=['POST'])
+@login_required
+def update_focus():
+    try:
+        if not supabase:
+            return jsonify({'success': False, 'error': 'Database not configured'}), 500
+        user_id = session.get('user_id')
+        payload = request.json
+        date = payload.get('date')
+        focus_time = payload.get('focus_time')
+        
+        # Check if focus session exists for today
+        result = supabase.table('tasks').select('id, focus_time').eq('user_id', user_id).eq('date', date).eq('task_name', 'Focus Session').execute()
+        
+        if result.data and len(result.data) > 0:
+            # Update existing focus session by adding time
+            existing_focus = result.data[0]['focus_time'] or 0
+            new_focus = existing_focus + focus_time
+            task_id = result.data[0]['id']
+            supabase.table('tasks').update({'focus_time': new_focus}).eq('id', task_id).execute()
+            return jsonify({'success': True, 'updated': True})
+        else:
+            return jsonify({'success': False, 'message': 'No existing session'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
