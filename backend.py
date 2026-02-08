@@ -200,7 +200,8 @@ def update_garden():
                 'user_id': user_id,
                 'block_count': 0,
                 'is_dead': False,
-                'last_activity': today
+                'last_activity': today,
+                'last_block_award_date': None
             }).execute()
             return jsonify({'success': True, 'days_inactive': 0})
         
@@ -227,10 +228,13 @@ def update_garden():
         
         # Update garden based on task completion
         new_block_count = current_state['block_count']
+        last_block_award_date = current_state.get('last_block_award_date')
         
-        if completion_pct >= 60:
-            # Add a new block
+        # Only award one block per day (check if we already awarded today)
+        if completion_pct >= 60 and last_block_award_date != today:
+            # Add a new block (only once per day)
             new_block_count += 1
+            last_block_award_date = today
         # If 40-50%, keep blocks (no change)
         # If < 40%, also keep blocks on that day
         
@@ -238,6 +242,7 @@ def update_garden():
         supabase.table('garden_state').update({
             'block_count': new_block_count,
             'last_activity': today,
+            'last_block_award_date': last_block_award_date,
             'is_dead': False
         }).eq('user_id', user_id).execute()
         
@@ -259,7 +264,8 @@ def replant_garden():
         supabase.table('garden_state').update({
             'block_count': 0,
             'is_dead': False,
-            'last_activity': today
+            'last_activity': today,
+            'last_block_award_date': None
         }).eq('user_id', user_id).execute()
         
         return jsonify({'success': True})

@@ -316,29 +316,32 @@ p{line-height:1.6;color:rgba(75,28,113,0.85)}
     background: linear-gradient(180deg, #f0fff8 0%, #e8f5f0 100%);
     border-radius: 12px;
     border: 2px solid #7f4ca5;
+    width: fit-content;
+    margin: 0 auto;
 }
 
 .garden-grid {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 30px;
 }
 
 .garden-row {
     display: flex;
-    gap: 8px;
+    gap: -40px;
     justify-content: center;
 }
 
 .garden-block {
-    width: 300px;
-    height: 300px;
+    width: 120px;
+    height: 120px;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
     cursor: pointer;
     transition: transform 0.2s;
+    margin: -25px;
 }
 
 .garden-block:hover {
@@ -346,6 +349,6 @@ p{line-height:1.6;color:rgba(75,28,113,0.85)}
 }
 
 .garden-block.empty {
-    width: 80px;
-    height: 80px;
+    width: 10px;
+    height: 10px;
 }
